@@ -5,29 +5,28 @@ const bodyParser = require('body-parser');
 const crypto = require('crypto');
 
 const app = express();
-app.use(cors());
+
+// Middleware
+app.use(cors({
+  origin: '*', // Untuk development, ganti dengan IP spesifik di production
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type']
+}));
 app.use(bodyParser.json());
 
-// =========================================================
-// KONFIGURASI DATABASE UTAMA (KUNCI UTAMA)
-// =========================================================
-const DB_USER = 'postgres';
-const DB_PASSWORD = 'password';  // GANTI dengan password database PostgreSQL Anda
-// =========================================================
-
-// --- FUNGSI HELPER: ENKRIPSI MD5 ---
+// Fungsi hash MD5
 const hashMD5 = (str) => {
   return crypto.createHash('md5').update(str).digest('hex');
 };
 
-// Fungsi Helper Koneksi Database
+// Fungsi helper untuk koneksi database
 const executeQuery = async (dbConfig, queryText, params = []) => {
   const client = new Client({
-    host: dbConfig.host,
+    host: dbConfig.host || 'localhost',
     port: 5432,
     database: dbConfig.database,
-    user: DB_USER,
-    password: DB_PASSWORD,
+    user: 'postgres', // User utama PostgreSQL
+    password: 'password', // GANTI dengan password PostgreSQL Anda
   });
 
   try {
@@ -36,77 +35,100 @@ const executeQuery = async (dbConfig, queryText, params = []) => {
     await client.end();
     return res.rows;
   } catch (err) {
+    console.error('Database query error:', err.message);
     try { await client.end(); } catch (e) { }
     throw err;
   }
 };
 
-// 1. ENDPOINT: TEST KONEKSI & LOGIN (MD5 SUPPORT)
+// Endpoint untuk test koneksi
 app.post('/api/test-connection', async (req, res) => {
-  const { host, user: inputStoreCode, password: inputStorePassword, database } = req.body;
-
-  const client = new Client({
-    host,
-    port: 5432,
-    database,
-    user: DB_USER,
-    password: DB_PASSWORD,
-  });
+  console.log('Test connection request:', req.body);
+  
+  const { host, user: inputStoreCode, password: inputPassword, database } = req.body;
 
   try {
+    // 1. Hash password yang dikirim dari Flutter
+    // const hashedPassword = hashMD5(inputPassword);
+    const hashedPassword = inputPassword;
+    
+    // 2. Coba konek ke database
+    const client = new Client({
+      host: host || 'localhost',
+      port: 5432,
+      database: database,
+      user: 'postgres',
+      password: '', // GANTI dengan password PostgreSQL Anda
+    });
+
     await client.connect();
-
-    // UBAH PASSWORD INPUT MENJADI MD5 SEBELUM DICEK
-    const hashedPassword = hashMD5(inputStorePassword);
-
+    
+    // 3. Verifikasi store code dan password
     const checkQuery = `
       SELECT "StoreCode" 
       FROM "msStoreInfo" 
       WHERE "StoreCode" = $1 AND "Password" = $2
     `;
-
+    
     const checkResult = await client.query(checkQuery, [inputStoreCode, hashedPassword]);
     await client.end();
 
     if (checkResult.rows.length > 0) {
       res.json({
         status: 'success',
-        message: `Login Berhasil! Selamat datang ${inputStoreCode}.`
+        message: `Koneksi berhasil! Store: ${inputStoreCode}`
       });
     } else {
       res.status(401).json({
         status: 'error',
-        message: 'Gagal: Store Code atau Password salah.'
+        message: 'Store Code atau Password salah'
       });
     }
-
   } catch (error) {
-    try { await client.end(); } catch (e) { }
-    console.error('Login Error:', error.message);
-
+    console.error('Connection test error:', error.message);
+    
+    // Pesan error yang lebih spesifik
+    let errorMessage = error.message;
     if (error.message.includes('password authentication failed')) {
-      return res.status(500).json({ status: 'error', message: 'Setting Server Salah: Password DB di server/index.js tidak cocok.' });
+      errorMessage = 'Password database PostgreSQL salah. Periksa konfigurasi server.';
+    } else if (error.message.includes('does not exist')) {
+      errorMessage = 'Database tidak ditemukan';
+    } else if (error.message.includes('connect')) {
+      errorMessage = 'Tidak dapat terhubung ke database';
     }
-
-    res.status(500).json({ status: 'error', message: 'Koneksi Error: ' + error.message });
+    
+    res.status(500).json({
+      status: 'error',
+      message: errorMessage
+    });
   }
 });
 
-// 2. ENDPOINT: PENCARIAN BARANG (DIFIX: Menambahkan kolom description)
+// Endpoint untuk pencarian produk
 app.post('/api/search', async (req, res) => {
-  const { dbConfig, keyword } = req.body;
+  console.log('Search request:', req.body);
+  
+  const { keyword, dbConfig } = req.body;
 
   try {
     if (!keyword || keyword.trim().length === 0) {
       return res.json({ status: 'success', data: [] });
     }
 
+    // Hash password dari Flutter untuk koneksi
+    const hashedPassword = dbConfig.password;
+    
+    // Update dbConfig dengan password yang sudah di-hash
+    const updatedDbConfig = {
+      ...dbConfig,
+      password: hashedPassword
+    };
+
     const query = `
       SELECT 
         "Description" as name, 
         "SKU" as sku, 
-        "EndQty" as quantity,
-        "Description" as description 
+        "EndQty" as quantity
       FROM "trStock" 
       WHERE 
         "Description" ILIKE $1 OR 
@@ -116,18 +138,41 @@ app.post('/api/search', async (req, res) => {
     `;
 
     const values = [`%${keyword}%`];
-
-    const products = await executeQuery(dbConfig, query, values);
-
-    res.json({ status: 'success', data: products });
+    
+    const products = await executeQuery(updatedDbConfig, query, values);
+    
+    res.json({ 
+      status: 'success', 
+      data: products,
+      count: products.length 
+    });
 
   } catch (error) {
-    console.error('Search Error:', error.message);
-    res.status(500).json({ status: 'error', message: 'Gagal cari: ' + error.message });
+    console.error('Search error:', error.message);
+    res.status(500).json({ 
+      status: 'error', 
+      message: 'Gagal melakukan pencarian: ' + error.message 
+    });
   }
 });
 
-const PORT = 3000;
-app.listen(PORT, () => {
-  console.log(`Server berjalan di port ${PORT}`);
+// Endpoint untuk health check
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'online',
+    message: 'Server berjalan dengan baik',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Endpoint default
+app.get('/', (req, res) => {
+  res.send('SKU Checker API Server');
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Server berjalan di http://0.0.0.0:${PORT}`);
+  console.log(`🔗 Local: http://localhost:${PORT}`);
+  console.log(`📱 Arahkan Flutter ke IP ini: http://[IP-KOMPUTER]:${PORT}`);
 });

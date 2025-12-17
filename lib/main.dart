@@ -1,11 +1,16 @@
+import 'package:crypto/crypto.dart' show md5;
+import 'dart:convert' as convert;
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const SkuCheckerApp());
 }
 
-// --- Theme Constants (Mirip dengan Tailwind Config) ---
+// --- Theme Constants ---
 class AppColors {
   static const slate50 = Color(0xFFF8FAFC);
   static const slate100 = Color(0xFFF1F5F9);
@@ -15,18 +20,14 @@ class AppColors {
   static const slate700 = Color(0xFF334155);
   static const slate800 = Color(0xFF1E293B);
   static const slate900 = Color(0xFF0F172A);
-  
+
   static const blue50 = Color(0xFFEFF6FF);
   static const blue200 = Color(0xFFBFDBFE);
-  // static const elzattaPurple = Color(0xFF3B82F6);
-  // static const elzattaPurple = Color(0xFF2563EB);
   static const blue700 = Color(0xFF1D4ED8);
 
   static const elzattaPurple = Color(0xFF6C3756);
   static const elzattaDarkPurple = Color(0xFF3C1053);
-
   static const green500 = Color(0xFF22C55E);
-  
 }
 
 class SkuCheckerApp extends StatelessWidget {
@@ -42,7 +43,7 @@ class SkuCheckerApp extends StatelessWidget {
         primaryColor: AppColors.elzattaPurple,
         colorScheme: ColorScheme.fromSeed(seedColor: AppColors.elzattaPurple),
         useMaterial3: true,
-        fontFamily: 'Roboto', // Default flutter font, similar to sans
+        fontFamily: 'Roboto',
       ),
       home: const MainScreen(),
     );
@@ -74,7 +75,6 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Menggunakan LayoutBuilder untuk menentukan Tablet vs Mobile
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth > 768) {
@@ -86,14 +86,13 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // Layout Mobile (Bottom Navigation Bar)
   Widget _buildMobileLayout() {
     return Scaffold(
       body: SafeArea(child: _screens[_selectedIndex]),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          border: Border(top: BorderSide(color: AppColors.slate200)),
+          border: const Border(top: BorderSide(color: AppColors.slate200)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.05),
@@ -112,10 +111,7 @@ class _MainScreenState extends State<MainScreen> {
           type: BottomNavigationBarType.fixed,
           elevation: 0,
           items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.search),
-              label: 'Search',
-            ),
+            BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
             BottomNavigationBarItem(
               icon: Icon(Icons.qr_code_scanner),
               label: 'Scan',
@@ -130,7 +126,6 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // Layout Tablet (Navigation Rail di sebelah kiri)
   Widget _buildTabletLayout() {
     return Scaffold(
       body: Row(
@@ -140,10 +135,16 @@ class _MainScreenState extends State<MainScreen> {
             onDestinationSelected: _onItemTapped,
             backgroundColor: Colors.white,
             indicatorColor: AppColors.blue50,
-            selectedIconTheme: const IconThemeData(color: AppColors.elzattaPurple),
+            selectedIconTheme: const IconThemeData(
+              color: AppColors.elzattaPurple,
+            ),
             unselectedIconTheme: const IconThemeData(color: AppColors.slate600),
-            selectedLabelTextStyle: const TextStyle(color: AppColors.elzattaPurple),
-            unselectedLabelTextStyle: const TextStyle(color: AppColors.slate600),
+            selectedLabelTextStyle: const TextStyle(
+              color: AppColors.elzattaPurple,
+            ),
+            unselectedLabelTextStyle: const TextStyle(
+              color: AppColors.slate600,
+            ),
             labelType: NavigationRailLabelType.all,
             leading: Padding(
               padding: const EdgeInsets.only(bottom: 24.0, top: 24.0),
@@ -158,8 +159,8 @@ class _MainScreenState extends State<MainScreen> {
                   child: Text(
                     "SK",
                     style: TextStyle(
-                      color: Colors.white, 
-                      fontWeight: FontWeight.bold
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
@@ -180,7 +181,11 @@ class _MainScreenState extends State<MainScreen> {
               ),
             ],
           ),
-          const VerticalDivider(thickness: 1, width: 1, color: AppColors.slate200),
+          const VerticalDivider(
+            thickness: 1,
+            width: 1,
+            color: AppColors.slate200,
+          ),
           Expanded(child: _screens[_selectedIndex]),
         ],
       ),
@@ -191,45 +196,120 @@ class _MainScreenState extends State<MainScreen> {
 // --- Screens ---
 
 // 1. Search Screen
-class SearchScreen extends StatelessWidget {
+class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
+
+  @override
+  State<SearchScreen> createState() => _SearchScreenState();
+}
+
+class _SearchScreenState extends State<SearchScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  Map<String, dynamic>? _foundProduct;
+  bool _isLoading = false;
+  String _errorMessage = '';
+
+  String hashMD5(String input) {
+    return md5.convert(convert.utf8.encode(input)).toString();
+  }
+
+  Future<void> _performSearch() async {
+    final keyword = _searchController.text.trim();
+    if (keyword.isEmpty) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+      _foundProduct = null;
+    });
+
+    final prefs = await SharedPreferences.getInstance();
+    final serverIp = prefs.getString('server_ip') ?? '192.168.1.100';
+    final dbName = prefs.getString('db_name') ?? 'inventory_db';
+    final storeCode = prefs.getString('store_code') ?? 'STORE-001';
+
+    // PASSWORD LOGIC (hash with MD5)
+    final passwordRaw = '$storeCode-password';
+    final password = hashMD5(passwordRaw);
+
+    String baseUrl = serverIp;
+    if (!baseUrl.startsWith('http')) {
+      baseUrl = 'http://$baseUrl:3000';
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/search'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'keyword': keyword,
+          'dbConfig': {
+            'host':
+                'localhost', // FIX: Selalu gunakan localhost untuk koneksi DB internal server
+            'database': dbName,
+            'user': storeCode,
+            'password': password,
+          },
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        if (result['status'] == 'success' &&
+            (result['data'] as List).isNotEmpty) {
+          setState(() {
+            _foundProduct = result['data'][0];
+          });
+        } else {
+          setState(() {
+            _errorMessage = 'Barang tidak ditemukan.';
+          });
+        }
+      } else {
+        setState(() {
+          _errorMessage = 'Error Server: ${response.statusCode}';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Gagal koneksi. Pastikan Server Nyala.';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final isTablet = MediaQuery.of(context).size.width > 768;
-
-    if (isTablet) {
-      return _buildTabletView(context);
-    }
-    return _buildMobileView(context);
+    return isTablet ? _buildTabletView(context) : _buildMobileView(context);
   }
 
   Widget _buildMobileView(BuildContext context) {
     return Column(
       children: [
-        // Header
         Container(
           padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
           color: Colors.white,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-                Image.asset(
+              Image.asset(
                 'images/elzatta-logo.png',
-                alignment: Alignment.center,
                 height: 36,
                 fit: BoxFit.contain,
-                ),
+                errorBuilder: (context, error, stackTrace) => const SizedBox(),
+              ),
               const SizedBox(height: 16),
               _buildSearchBar(),
             ],
           ),
         ),
-        // Content
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
-            child: _buildProductCard(),
+            child: _buildContent(),
           ),
         ),
       ],
@@ -239,14 +319,11 @@ class SearchScreen extends StatelessWidget {
   Widget _buildTabletView(BuildContext context) {
     return Row(
       children: [
-        // Left Panel (List/Search)
         Container(
           width: 320,
           decoration: const BoxDecoration(
             color: Colors.white,
-            border: Border(
-              right: BorderSide(color: AppColors.slate200),
-            ),
+            border: Border(right: BorderSide(color: AppColors.slate200)),
           ),
           child: Column(
             children: [
@@ -257,43 +334,26 @@ class SearchScreen extends StatelessWidget {
                   children: [
                     const Text(
                       "SKU Search",
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.slate900),
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     _buildSearchBar(),
                   ],
                 ),
               ),
-              const Divider(height: 1, color: AppColors.slate100),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Row(
-                      children: const [
-                        Icon(Icons.access_time, size: 16, color: AppColors.slate50),
-                        SizedBox(width: 8),
-                        Text("Recent Searches", style: TextStyle(color: AppColors.slate700)),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    _buildRecentSearchItem("Premium Widget Pro", "WIDGET-2024", "2 min ago", true),
-                    _buildRecentSearchItem("Smart Gadget Plus", "GADGET-5500", "15 min ago", false),
-                    _buildRecentSearchItem("Professional Tool Set", "TOOL-8800", "1 hour ago", false),
-                  ],
-                ),
-              )
             ],
           ),
         ),
-        // Right Panel (Detail)
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(32),
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 600),
-                child: _buildProductCard(isTablet: true),
+                child: _buildContent(isTablet: true),
               ),
             ),
           ),
@@ -304,9 +364,15 @@ class SearchScreen extends StatelessWidget {
 
   Widget _buildSearchBar() {
     return TextField(
+      controller: _searchController,
+      onSubmitted: (_) => _performSearch(),
       decoration: InputDecoration(
         hintText: "Cari Barang/SKU...",
         prefixIcon: const Icon(Icons.search, color: AppColors.slate400),
+        suffixIcon: IconButton(
+          icon: const Icon(Icons.arrow_forward),
+          onPressed: _performSearch,
+        ),
         filled: true,
         fillColor: AppColors.slate50,
         contentPadding: const EdgeInsets.symmetric(vertical: 12),
@@ -320,38 +386,43 @@ class SearchScreen extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(50),
-          borderSide: const BorderSide(color: AppColors.elzattaPurple, width: 2),
+          borderSide: const BorderSide(
+            color: AppColors.elzattaPurple,
+            width: 2,
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildRecentSearchItem(String name, String sku, String time, bool isActive) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: isActive ? AppColors.blue50 : AppColors.slate50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isActive ? AppColors.blue200 : Colors.transparent, 
-          width: isActive ? 1 : 0
+  Widget _buildContent({bool isTablet = false}) {
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_errorMessage.isNotEmpty)
+      return Center(
+        child: Text(_errorMessage, style: const TextStyle(color: Colors.red)),
+      );
+    if (_foundProduct == null)
+      return Center(
+        child: Text(
+          "Silakan cari barang.",
+          style: const TextStyle(color: AppColors.slate400),
         ),
-      ),
-      child: ListTile(
-        title: Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.slate900)),
-        subtitle: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(sku, style: const TextStyle(fontSize: 12, color: AppColors.slate600)),
-            Text(time, style: const TextStyle(fontSize: 12, color: AppColors.slate400)),
-          ],
-        ),
-        onTap: () {},
-      ),
+      );
+
+    return _buildProductCard(
+      name: _foundProduct!['name'] ?? 'Unknown',
+      sku: _foundProduct!['sku'] ?? '-',
+      qty: _foundProduct!['quantity']?.toString() ?? '0',
+      isTablet: isTablet,
     );
   }
 
-  Widget _buildProductCard({bool isTablet = false}) {
+  Widget _buildProductCard({
+    required String name,
+    required String sku,
+    required String qty,
+    bool isTablet = false,
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -362,13 +433,12 @@ class SearchScreen extends StatelessWidget {
             color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
-          )
+          ),
         ],
       ),
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          // Icon
           Container(
             width: isTablet ? 128 : 96,
             height: isTablet ? 128 : 96,
@@ -383,10 +453,14 @@ class SearchScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          // Title
-          const Text(
-            "Premium Widget Pro",
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.slate900),
+          Text(
+            name,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: AppColors.slate900,
+            ),
           ),
           const SizedBox(height: 8),
           Container(
@@ -395,13 +469,15 @@ class SearchScreen extends StatelessWidget {
               color: AppColors.slate100,
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Text(
-              "SKU: WIDGET-2024",
-              style: TextStyle(color: AppColors.slate600, fontWeight: FontWeight.w500),
+            child: Text(
+              "SKU: $sku",
+              style: const TextStyle(
+                color: AppColors.slate600,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
           const SizedBox(height: 24),
-          // Stock Gradient Card
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(32),
@@ -417,21 +493,37 @@ class SearchScreen extends StatelessWidget {
                   color: AppColors.elzattaPurple.withOpacity(0.3),
                   blurRadius: 12,
                   offset: const Offset(0, 6),
-                )
+                ),
               ],
             ),
             child: Column(
               children: [
-                Text("Stock Saat Ini", style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 14)),
+                Text(
+                  "Stock Saat Ini",
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 14,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
-                  children: const [
-                    Text("342", style: TextStyle(color: Colors.white, fontSize: 48, fontWeight: FontWeight.bold)),
-                    SizedBox(width: 8),
-                    Text("unit", style: TextStyle(color: Colors.white, fontSize: 18)),
+                  children: [
+                    Text(
+                      qty,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 48,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      "unit",
+                      style: TextStyle(color: Colors.white, fontSize: 18),
+                    ),
                   ],
                 ),
               ],
@@ -443,238 +535,242 @@ class SearchScreen extends StatelessWidget {
   }
 }
 
-// 2. Scan Screen
+// 2. Scan Screen (Placeholder)
 class ScanScreen extends StatelessWidget {
   const ScanScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        // Camera Viewfinder Background
-        Container(
-          width: double.infinity,
-          height: double.infinity,
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [AppColors.slate800, AppColors.slate900],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
-              Icon(Icons.qr_code_scanner, size: 64, color: Colors.white24),
-              SizedBox(height: 16),
-              Text("Camera Feed", style: TextStyle(color: Colors.white54)),
-            ],
-          ),
-        ),
-        
-        // Scan Frame
-        Center(
-          child: Container(
-            width: 300,
-            height: 200,
-            decoration: BoxDecoration(
-              border: Border.all(color: AppColors.elzattaPurple.withOpacity(0.8), width: 4),
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Stack(
-              children: [
-                // Corner accents could be drawn with CustomPainter, keeping it simple here
-                Center(
-                  child: Container(
-                    height: 2,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: AppColors.elzattaPurple,
-                      boxShadow: [
-                        BoxShadow(color: AppColors.elzattaPurple, blurRadius: 10, spreadRadius: 1)
-                      ]
-                    ),
-                  ),
-                )
-              ],
-            ),
-          ),
-        ),
-
-        // Instructions
-        Positioned(
-          top: 40,
-          left: 0,
-          right: 0,
-          child: Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.slate800.withOpacity(0.9),
-                borderRadius: BorderRadius.circular(50),
-              ),
-              child: const Text(
-                "Posisikan kode QR di dalam bingkai untuk memindai",
-                style: TextStyle(color: Colors.white, fontSize: 14),
-              ),
-            ),
-          ),
-        ),
-
-        // Bottom Controls
-        Positioned(
-          bottom: 40,
-          left: 0,
-          right: 0,
-          child: Center(
-            child: Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                shape: BoxShape.circle,
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.fullscreen, color: Colors.white),
-                onPressed: () {},
-              ),
-            ),
-          ),
-        ),
-      ],
+    return const Center(
+      child: Text("Fitur Scan akan diimplementasikan dengan mobile_scanner"),
     );
   }
 }
 
 // 3. Settings Screen
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // For Tablet, create a centered modal-like look, for mobile full width
-    final isTablet = MediaQuery.of(context).size.width > 768;
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
 
+class _SettingsScreenState extends State<SettingsScreen> {
+  // Fungsi hash MD5
+  String hashMD5(String input) {
+    return md5.convert(convert.utf8.encode(input)).toString();
+  }
+
+  final _serverIpController = TextEditingController();
+  final _dbNameController = TextEditingController();
+  final _storeCodeController = TextEditingController();
+
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _serverIpController.text =
+          prefs.getString('server_ip') ?? '192.168.1.100';
+      _dbNameController.text = prefs.getString('db_name') ?? 'inventory_db';
+      _storeCodeController.text = prefs.getString('store_code') ?? 'STORE-001';
+    });
+  }
+
+  Future<void> _saveSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('server_ip', _serverIpController.text);
+    await prefs.setString('db_name', _dbNameController.text);
+    await prefs.setString('store_code', _storeCodeController.text);
+
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Pengaturan tersimpan!')));
+    }
+  }
+
+  // FUNGSI UTAMA KONEKSI KE SERVER
+  Future<void> _testConnection() async {
+    setState(() => _isLoading = true);
+
+    // 1. Ambil konfigurasi
+    final serverIp = _serverIpController.text.trim();
+    final dbName = _dbNameController.text.trim();
+    final storeCode = _storeCodeController.text.trim();
+
+    // 2. Generate password
+    final passwordRaw = '$storeCode-password';
+    final password = hashMD5(passwordRaw);
+
+    // 3. Format URL
+    String baseUrl = serverIp;
+    if (!baseUrl.startsWith('http')) {
+      baseUrl = 'http://$baseUrl:3000';
+    }
+
+    try {
+      // 4. Kirim request test
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/test-connection'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'host': 'localhost',
+              'database': dbName,
+              'user': storeCode,
+              'password': password,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      final result = jsonDecode(response.body);
+
+      if (mounted) {
+        if (response.statusCode == 200) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ ${result['message']}'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ ${result['message']}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🌐 Koneksi gagal: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isTablet = MediaQuery.of(context).size.width > 768;
     Widget content = Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (!isTablet) ...[
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Text("Pengaturan", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.slate900)),
+          const Text(
+            "Pengaturan Server",
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: AppColors.slate900,
             ),
-          ],
-          if (isTablet) ...[
-             Row(
-               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-               children: [
-                 const Text("Pengaturan", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.slate900)),
-                 IconButton(icon: const Icon(Icons.close, color: AppColors.slate50), onPressed: (){},)
-               ],
-             ),
-             const SizedBox(height: 24),
-          ],
+          ),
+          const SizedBox(height: 24),
 
-          _buildSettingField("Server IP Address", Icons.dns, "192.168.1.100"),
+          _buildSettingField(
+            "Server IP Address",
+            Icons.dns,
+            _serverIpController,
+          ),
           const SizedBox(height: 16),
-          _buildSettingField("Nama Database", Icons.storage, "inventory_db"),
+
+          _buildSettingField("Nama Database", Icons.storage, _dbNameController),
           const SizedBox(height: 16),
-          _buildSettingField("Store Code", Icons.store, "STORE-001"),
-          
+
+          _buildSettingField("Store Code", Icons.store, _storeCodeController),
           const SizedBox(height: 32),
-          
-            Row(
+
+          Row(
             children: [
               Expanded(
-              child: ElevatedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.network_check),
-                label: const Text("Test Koneksi"),
-                style: ElevatedButton.styleFrom(
-                backgroundColor: const Color.fromARGB(255, 158, 78, 125),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                elevation: 4,
+                child: ElevatedButton.icon(
+                  onPressed: _isLoading ? null : _testConnection,
+                  icon: _isLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Icon(Icons.network_check),
+                  label: const Text("Test Koneksi"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color.fromARGB(255, 158, 78, 125),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                 ),
-              ),
               ),
               const SizedBox(width: 16),
-
               Expanded(
-              child: ElevatedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.save),
-                label: const Text("Simpan Konfigurasi"),
-                style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.elzattaPurple,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                elevation: 4,
+                child: ElevatedButton.icon(
+                  onPressed: _saveSettings,
+                  icon: const Icon(Icons.save),
+                  label: const Text("Simpan"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.elzattaPurple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                 ),
               ),
-              ),
-              
             ],
-            ),
-          
-          const SizedBox(height: 16),
-          const Center(
-            child: Text(
-              "Settings will be applied immediately after saving",
-              style: TextStyle(color: AppColors.slate50, fontSize: 12),
-            ),
           ),
         ],
       ),
     );
 
-    if (isTablet) {
-      return Center(
-        child: Container(
-          width: 600,
-          height: 600,
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha((0.1 * 255).round()),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              )
-            ],
-          ),
-          child: content,
-        ),
-      );
-    }
-
-    return SafeArea(
-      child: SingleChildScrollView(
-        child: content,
-      ),
-    );
+    return isTablet
+        ? Center(
+            child: Container(
+              width: 600,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black12, blurRadius: 20),
+                ],
+              ),
+              child: content,
+            ),
+          )
+        : SafeArea(child: SingleChildScrollView(child: content));
   }
 
-  Widget _buildSettingField(String label, IconData icon, String initialValue) {
+  Widget _buildSettingField(
+    String label,
+    IconData icon,
+    TextEditingController controller,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.slate100),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
-          )
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -683,22 +779,23 @@ class SettingsScreen extends StatelessWidget {
             children: [
               Icon(icon, size: 20, color: AppColors.elzattaPurple),
               const SizedBox(width: 8),
-              Text(label, style: const TextStyle(fontWeight: FontWeight.w500, color: AppColors.slate700)),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.slate700,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
           TextFormField(
-            initialValue: initialValue,
+            controller: controller,
             decoration: InputDecoration(
               isDense: true,
-              contentPadding: const EdgeInsets.all(12),
               filled: true,
               fillColor: AppColors.slate50,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.slate200),
-              ),
-              enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: AppColors.slate200),
               ),
