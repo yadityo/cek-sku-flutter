@@ -2,7 +2,7 @@ import 'package:crypto/crypto.dart' show md5;
 import 'dart:convert' as convert;
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+// import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -111,14 +111,14 @@ class _MainScreenState extends State<MainScreen> {
           type: BottomNavigationBarType.fixed,
           elevation: 0,
           items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
+            BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Cari'),
             BottomNavigationBarItem(
               icon: Icon(Icons.qr_code_scanner),
               label: 'Scan',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.settings),
-              label: 'Settings',
+              label: 'Pengaturan',
             ),
           ],
         ),
@@ -169,7 +169,7 @@ class _MainScreenState extends State<MainScreen> {
             destinations: const [
               NavigationRailDestination(
                 icon: Icon(Icons.search),
-                label: Text('Search'),
+                label: Text('Cari'),
               ),
               NavigationRailDestination(
                 icon: Icon(Icons.qr_code_scanner),
@@ -177,7 +177,7 @@ class _MainScreenState extends State<MainScreen> {
               ),
               NavigationRailDestination(
                 icon: Icon(Icons.settings),
-                label: Text('Settings'),
+                label: Text('Pengaturan'),
               ),
             ],
           ),
@@ -332,11 +332,12 @@ class _SearchScreenState extends State<SearchScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      "SKU Search",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                    Center(
+                      child: Image.asset(
+                      'images/elzatta-logo.png',
+                      height: 36,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) => const SizedBox(),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -363,38 +364,76 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildSearchBar() {
-    return TextField(
-      controller: _searchController,
-      onSubmitted: (_) => _performSearch(),
-      decoration: InputDecoration(
-        hintText: "Cari Barang/SKU...",
-        prefixIcon: const Icon(Icons.search, color: AppColors.slate400),
-        suffixIcon: IconButton(
-          icon: const Icon(Icons.arrow_forward),
-          onPressed: _performSearch,
-        ),
-        filled: true,
-        fillColor: AppColors.slate50,
-        contentPadding: const EdgeInsets.symmetric(vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(50),
-          borderSide: const BorderSide(color: AppColors.slate200),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(50),
-          borderSide: const BorderSide(color: AppColors.slate200),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(50),
-          borderSide: const BorderSide(
-            color: AppColors.elzattaPurple,
-            width: 2,
+  return Row(
+    children: [
+      Expanded(
+        child: TextField(
+          controller: _searchController,
+          onSubmitted: (_) => _performSearch(),
+          // Menambahkan listener untuk update icon X secara real-time
+          onChanged: (value) {
+            setState(() {}); 
+          },
+          decoration: InputDecoration(
+            hintText: "Cari Barang/SKU...",
+            prefixIcon: const Icon(Icons.search, color: AppColors.slate400),
+            // TOMBOL X (Clear) di dalam ujung kanan Search Bar
+            suffixIcon: _searchController.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.cancel, color: AppColors.slate400),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() {}); // Refresh untuk menyembunyikan icon X
+                    },
+                  )
+                : null,
+            filled: true,
+            fillColor: AppColors.slate50,
+            contentPadding: const EdgeInsets.symmetric(vertical: 12),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(50),
+              borderSide: const BorderSide(color: AppColors.slate200),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(50),
+              borderSide: const BorderSide(color: AppColors.slate200),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(50),
+              borderSide: const BorderSide(
+                color: AppColors.elzattaPurple,
+                width: 2,
+              ),
+            ),
           ),
         ),
       ),
-    );
-  }
+      const SizedBox(width: 8),
+      // TOMBOL CARI di sebelah kanan Search Bar
+      ElevatedButton(
+        onPressed: _isLoading ? null : _performSearch,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.elzattaPurple,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(50),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+          elevation: 0,
+        ),
+        child: _isLoading 
+          ? const SizedBox(
+              width: 20, 
+              height: 20, 
+              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+            )
+          : const Text("Cari", style: TextStyle(fontWeight: FontWeight.bold)),
+      ),
+    ],
+  );
+}
 
+  
   Widget _buildContent({bool isTablet = false}) {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     if (_errorMessage.isNotEmpty)
@@ -447,7 +486,7 @@ class _SearchScreenState extends State<SearchScreen> {
               borderRadius: BorderRadius.circular(24),
             ),
             child: Icon(
-              Icons.inventory_2_outlined,
+              Icons.checkroom,
               size: isTablet ? 64 : 48,
               color: AppColors.elzattaPurple,
             ),
