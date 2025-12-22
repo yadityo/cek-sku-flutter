@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 // import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 void main() {
   runApp(const SkuCheckerApp());
@@ -43,7 +44,7 @@ class SkuCheckerApp extends StatelessWidget {
         primaryColor: AppColors.elzattaPurple,
         colorScheme: ColorScheme.fromSeed(seedColor: AppColors.elzattaPurple),
         useMaterial3: true,
-        fontFamily: 'Roboto',
+        fontFamily: 'Poppins',
       ),
       home: const MainScreen(),
     );
@@ -209,9 +210,9 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _isLoading = false;
   String _errorMessage = '';
 
-  String hashMD5(String input) {
-    return md5.convert(convert.utf8.encode(input)).toString();
-  }
+  // String hashMD5(String input) {
+  //   return md5.convert(convert.utf8.encode(input)).toString();
+  // }
 
   Future<void> _performSearch() async {
     final keyword = _searchController.text.trim();
@@ -230,7 +231,8 @@ class _SearchScreenState extends State<SearchScreen> {
 
     // PASSWORD LOGIC (hash with MD5)
     final passwordRaw = '$storeCode-password';
-    final password = hashMD5(passwordRaw);
+    // final password = hashMD5(passwordRaw);
+    final password = passwordRaw;
 
     String baseUrl = serverIp;
     if (!baseUrl.startsWith('http')) {
@@ -238,20 +240,22 @@ class _SearchScreenState extends State<SearchScreen> {
     }
 
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/search'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'keyword': keyword,
-          'dbConfig': {
-            'host':
-                'localhost', // FIX: Selalu gunakan localhost untuk koneksi DB internal server
-            'database': dbName,
-            'user': storeCode,
-            'password': password,
-          },
-        }),
-      ).timeout(const Duration(seconds: 10));
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/search'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'keyword': keyword,
+              'dbConfig': {
+                'host':
+                    'localhost', // FIX: Selalu gunakan localhost untuk koneksi DB internal server
+                'database': dbName,
+                'user': storeCode,
+                'password': password,
+              },
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final result = jsonDecode(response.body);
@@ -272,7 +276,8 @@ class _SearchScreenState extends State<SearchScreen> {
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Gagal koneksi. Pastikan Server Nyala.';
+        _errorMessage =
+            'Gagal koneksi. Pastikan Server Nyala & Dalam Jaringan Yang Sama.';
       });
     } finally {
       setState(() {
@@ -334,10 +339,11 @@ class _SearchScreenState extends State<SearchScreen> {
                   children: [
                     Center(
                       child: Image.asset(
-                      'images/elzatta-logo.png',
-                      height: 36,
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) => const SizedBox(),
+                        'images/elzatta-logo.png',
+                        height: 36,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const SizedBox(),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -364,76 +370,81 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildSearchBar() {
-  return Row(
-    children: [
-      Expanded(
-        child: TextField(
-          controller: _searchController,
-          onSubmitted: (_) => _performSearch(),
-          // Menambahkan listener untuk update icon X secara real-time
-          onChanged: (value) {
-            setState(() {}); 
-          },
-          decoration: InputDecoration(
-            hintText: "Cari Barang/SKU...",
-            prefixIcon: const Icon(Icons.search, color: AppColors.slate400),
-            // TOMBOL X (Clear) di dalam ujung kanan Search Bar
-            suffixIcon: _searchController.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.cancel, color: AppColors.slate400),
-                    onPressed: () {
-                      _searchController.clear();
-                      setState(() {}); // Refresh untuk menyembunyikan icon X
-                    },
-                  )
-                : null,
-            filled: true,
-            fillColor: AppColors.slate50,
-            contentPadding: const EdgeInsets.symmetric(vertical: 12),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(50),
-              borderSide: const BorderSide(color: AppColors.slate200),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(50),
-              borderSide: const BorderSide(color: AppColors.slate200),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(50),
-              borderSide: const BorderSide(
-                color: AppColors.elzattaPurple,
-                width: 2,
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _searchController,
+            onSubmitted: (_) => _performSearch(),
+            // Menambahkan listener untuk update icon X secara real-time
+            onChanged: (value) {
+              setState(() {});
+            },
+            decoration: InputDecoration(
+              hintText: "Cari Barang/SKU...",
+              prefixIcon: const Icon(Icons.search, color: AppColors.slate400),
+              // TOMBOL X (Clear) di dalam ujung kanan Search Bar
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.cancel, color: AppColors.slate400),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() {}); // Refresh untuk menyembunyikan icon X
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: AppColors.slate50,
+              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(50),
+                borderSide: const BorderSide(color: AppColors.slate200),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(50),
+                borderSide: const BorderSide(color: AppColors.slate200),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(50),
+                borderSide: const BorderSide(
+                  color: AppColors.elzattaPurple,
+                  width: 2,
+                ),
               ),
             ),
           ),
         ),
-      ),
-      const SizedBox(width: 8),
-      // TOMBOL CARI di sebelah kanan Search Bar
-      ElevatedButton(
-        onPressed: _isLoading ? null : _performSearch,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.elzattaPurple,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(50),
+        const SizedBox(width: 8),
+        // TOMBOL CARI di sebelah kanan Search Bar
+        ElevatedButton(
+          onPressed: _isLoading ? null : _performSearch,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.elzattaPurple,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(50),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            elevation: 0,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-          elevation: 0,
+          child: _isLoading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : const Text(
+                  "Cari",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
         ),
-        child: _isLoading 
-          ? const SizedBox(
-              width: 20, 
-              height: 20, 
-              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
-            )
-          : const Text("Cari", style: TextStyle(fontWeight: FontWeight.bold)),
-      ),
-    ],
-  );
-}
+      ],
+    );
+  }
 
-  
   Widget _buildContent({bool isTablet = false}) {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     if (_errorMessage.isNotEmpty)
@@ -501,7 +512,7 @@ class _SearchScreenState extends State<SearchScreen> {
               color: AppColors.slate900,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             decoration: BoxDecoration(
@@ -575,13 +586,412 @@ class _SearchScreenState extends State<SearchScreen> {
 }
 
 // 2. Scan Screen (Placeholder)
-class ScanScreen extends StatelessWidget {
+
+class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
 
   @override
+  State<ScanScreen> createState() => _ScanScreenState();
+}
+
+class _ScanScreenState extends State<ScanScreen> {
+  String? _barcode;
+  bool _isProcessing = false;
+  Map<String, dynamic>? _foundProduct; // Menyimpan data produk hasil scan
+
+  void _onDetect(BarcodeCapture capture) async {
+    if (_isProcessing) return;
+    final barcode = capture.barcodes.firstOrNull?.rawValue;
+    if (barcode != null && barcode != _barcode) {
+      setState(() {
+        _isProcessing = true;
+        _barcode = barcode;
+        _foundProduct = null;
+      });
+
+      // Ambil konfigurasi server dari SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      final serverIp = prefs.getString('server_ip') ?? '192.168.1.100';
+      final dbName = prefs.getString('db_name') ?? 'inventory_db';
+      final storeCode = prefs.getString('store_code') ?? 'STORE-001';
+      final passwordRaw = '$storeCode-password'; // Password asli
+      final password = passwordRaw; // Tidak di-hash MD5, kirim string asli
+
+      String baseUrl = serverIp;
+      if (!baseUrl.startsWith('http')) {
+        baseUrl = 'http://$baseUrl:3000';
+      }
+
+      try {
+        final response = await http
+            .post(
+              Uri.parse('$baseUrl/api/search'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'keyword': barcode,
+                'dbConfig': {
+                  'host': 'localhost',
+                  'database': dbName,
+                  'user': storeCode,
+                  'password': password,
+                },
+              }),
+            )
+            .timeout(const Duration(seconds: 10));
+
+        if (response.statusCode == 200) {
+          final result = jsonDecode(response.body);
+          if (result['status'] == 'success' &&
+              (result['data'] as List).isNotEmpty) {
+            setState(() {
+              _foundProduct = result['data'][0];
+            });
+          } else {
+            setState(() {
+              _foundProduct = {
+                'name': 'Barang tidak ditemukan',
+                'sku': barcode,
+                'quantity': 0,
+              };
+            });
+          }
+        } else {
+          setState(() {
+            _foundProduct = {
+              'name': 'Error Server: ${response.statusCode}',
+              'sku': barcode,
+              'quantity': 0,
+            };
+          });
+        }
+      } catch (e) {
+        setState(() {
+          _foundProduct = {
+            'name': 'Gagal koneksi ke server',
+            'sku': barcode,
+            'quantity': 0,
+          };
+        });
+      } finally {
+        setState(() => _isProcessing = false);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Text("Fitur Scan akan diimplementasikan dengan mobile_scanner"),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        bool isTablet = constraints.maxWidth > 768;
+        return Scaffold(
+          backgroundColor: const Color(0xFF0F172A), // Dark Background
+          body: isTablet ? _buildTabletView() : _buildMobileView(),
+        );
+      },
+    );
+  }
+
+  // --- VIEW MOBILE ---
+  Widget _buildMobileView() {
+    return Stack(
+      children: [
+        MobileScanner(onDetect: _onDetect, fit: BoxFit.cover),
+        _buildScannerOverlay(label: "Posisikan barcode didalam frame"),
+        if (_foundProduct != null) _buildBottomSheetMobile(),
+      ],
+    );
+  }
+
+  // --- VIEW TABLET (LANDSCAPE) ---
+  Widget _buildTabletView() {
+    return Row(
+      children: [
+        // Sisi Kiri: Scanner
+        Expanded(
+          flex: 6,
+          child: Stack(
+            children: [
+              MobileScanner(onDetect: _onDetect, fit: BoxFit.cover),
+              _buildScannerOverlay(label: "Posisikan barcode di dalam frame"),
+              Positioned(
+                bottom: 40,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.fullscreen_exit,
+                      color: Colors.white,
+                      size: 32,
+                    ),
+                    onPressed: () {},
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Sisi Kanan: Detail Info
+        Expanded(
+          flex: 4,
+          child: Container(
+            color: Colors.white,
+            padding: const EdgeInsets.all(32),
+            child: _foundProduct == null
+                ? const Center(child: Text("Menunggu pemindaian..."))
+                : _buildProductDetailPanel(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // --- REUSABLE COMPONENTS ---
+
+  Widget _buildScannerOverlay({required String label}) {
+    return Stack(
+      children: [
+        // Dim Background (Lubang di tengah)
+        ColorFiltered(
+          colorFilter: ColorFilter.mode(
+            Colors.black.withOpacity(0.5),
+            BlendMode.srcOver,
+          ),
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Colors.black,
+              backgroundBlendMode: BlendMode.dstOut,
+            ),
+          ),
+        ),
+        // Text Hint
+        Positioned(
+          top: 80,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.black38,
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+        ),
+        // Scanner Frame (Blue border corners)
+        Center(
+          child: Container(
+            width: 280,
+            height: 160,
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: Colors.blueAccent.withOpacity(0.5),
+                width: 2,
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Stack(
+              children: [
+                _buildCorner(0, 0, top: true, left: true),
+                _buildCorner(0, 0, top: true, left: false),
+                _buildCorner(0, 0, top: false, left: true),
+                _buildCorner(0, 0, top: false, left: false),
+                // Scanning Line Effect
+                const Center(
+                  child: Divider(color: Colors.blueAccent, thickness: 2),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCorner(
+    double dist,
+    double size, {
+    required bool top,
+    required bool left,
+  }) {
+    return Positioned(
+      top: top ? 0 : null,
+      bottom: top ? null : 0,
+      left: left ? 0 : null,
+      right: left ? null : 0,
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          border: Border(
+            top: top
+                ? const BorderSide(color: Colors.white, width: 6)
+                : BorderSide.none,
+            bottom: !top
+                ? const BorderSide(color: Colors.white, width: 6)
+                : BorderSide.none,
+            left: left
+                ? const BorderSide(color: Colors.white, width: 6)
+                : BorderSide.none,
+            right: !left
+                ? const BorderSide(color: Colors.white, width: 6)
+                : BorderSide.none,
+          ),
+          borderRadius: BorderRadius.only(
+            topLeft: top && left ? const Radius.circular(15) : Radius.zero,
+            topRight: top && !left ? const Radius.circular(15) : Radius.zero,
+            bottomLeft: !top && left ? const Radius.circular(15) : Radius.zero,
+            bottomRight: !top && !left
+                ? const Radius.circular(15)
+                : Radius.zero,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProductDetailPanel() {
+    return Stack(
+      children: [
+        // Main content
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Text(
+              "Scan Berhasil",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const Text(
+              "Item ditemukan di database",
+              style: TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 30),
+            // Product Card
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 20,
+                  ),
+                ],
+                border: Border.all(color: AppColors.slate100),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.blue50,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(
+                      Icons.checkroom,
+                      color: AppColors.elzattaPurple,
+                      size: 40,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                    Center(
+                    child: Text(
+                      _foundProduct?['name']?.toString() ?? '-',
+                      style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "SKU: ${_foundProduct?['sku']?.toString() ?? '-'}",
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                  const SizedBox(height: 16),
+                  // Stock Badge
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppColors.elzattaDarkPurple,
+                          AppColors.elzattaPurple,
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.all(Radius.circular(16)),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text(
+                          "Stock Saat Ini",
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                        Text(
+                          "${_foundProduct?['quantity']?.toString() ?? '0'} unit",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        // Close button
+        Positioned(
+          top: 0,
+          right: 0,
+          child: IconButton(
+            icon: const Icon(Icons.close, color: AppColors.slate400),
+            onPressed: () {
+              setState(() {
+                _foundProduct = null;
+                _barcode =
+                    null; // Sembunyikan panel dengan menghapus data produk & barcode
+              });
+            },
+            tooltip: 'Tutup',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBottomSheetMobile() {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.4,
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
+      builder: (_, controller) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        child: SingleChildScrollView(
+          controller: controller,
+          padding: const EdgeInsets.all(24),
+          child: _buildProductDetailPanel(),
+        ),
+      ),
     );
   }
 }
@@ -596,9 +1006,9 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   // Fungsi hash MD5
-  String hashMD5(String input) {
-    return md5.convert(convert.utf8.encode(input)).toString();
-  }
+  // String hashMD5(String input) {
+  //   return md5.convert(convert.utf8.encode(input)).toString();
+  // }
 
   final _serverIpController = TextEditingController();
   final _dbNameController = TextEditingController();
@@ -643,10 +1053,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final serverIp = _serverIpController.text.trim();
     final dbName = _dbNameController.text.trim();
     final storeCode = _storeCodeController.text.trim();
+    final passwordFinal = 'password'; // FIX: Gunakan password statis
 
     // 2. Generate password
-    final passwordRaw = '$storeCode-password';
-    final password = hashMD5(passwordRaw);
+    final passwordRaw = storeCode + "-" + passwordFinal;
+    // final password = hashMD5(passwordRaw);
+    final password = passwordRaw;
 
     // 3. Format URL
     String baseUrl = serverIp;

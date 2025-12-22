@@ -15,9 +15,9 @@ app.use(cors({
 app.use(bodyParser.json());
 
 // Fungsi hash MD5
-const hashMD5 = (str) => {
-  return crypto.createHash('md5').update(str).digest('hex');
-};
+// const hashMD5 = (str) => {
+//   return crypto.createHash('md5').update(str).digest('hex');
+// };
 
 // Fungsi helper untuk koneksi database
 const executeQuery = async (dbConfig, queryText, params = []) => {
@@ -43,67 +43,44 @@ const executeQuery = async (dbConfig, queryText, params = []) => {
 
 // Endpoint untuk test koneksi
 app.post('/api/test-connection', async (req, res) => {
-  console.log('Test connection request:', req.body);
-  
   const { host, user: inputStoreCode, password: inputPassword, database } = req.body;
 
   try {
-    // 1. Hash password yang dikirim dari Flutter
-    // const hashedPassword = hashMD5(inputPassword);
-    const hashedPassword = inputPassword;
+    // Tampilkan di console untuk memastikan teks asli masuk
+    console.log('Password yang diterima:', inputPassword);
+
+    // LANGKAH PENTING: Jangan di-hash!
+    const passwordUntukDicek = inputPassword; 
     
-    // 2. Coba konek ke database
     const client = new Client({
       host: host || 'localhost',
       port: 5432,
       database: database,
       user: 'postgres',
-      password: '', // GANTI dengan password PostgreSQL Anda
+      password: 'password_postgres_anda', 
     });
 
     await client.connect();
     
-    // 3. Verifikasi store code dan password
+    // Query ini akan mencari password yang SAMA PERSIS (plain text) di database
     const checkQuery = `
       SELECT "StoreCode" 
       FROM "msStoreInfo" 
       WHERE "StoreCode" = $1 AND "Password" = $2
     `;
     
-    const checkResult = await client.query(checkQuery, [inputStoreCode, hashedPassword]);
+    const checkResult = await client.query(checkQuery, [inputStoreCode, passwordUntukDicek]);
     await client.end();
 
     if (checkResult.rows.length > 0) {
-      res.json({
-        status: 'success',
-        message: `Koneksi berhasil! Store: ${inputStoreCode}`
-      });
+      res.json({ status: 'success', message: `Berhasil! Login sebagai: ${inputStoreCode}` });
     } else {
-      res.status(401).json({
-        status: 'error',
-        message: 'Store Code atau Password salah'
-      });
+      res.status(401).json({ status: 'error', message: 'Store Code atau Password salah' });
     }
   } catch (error) {
-    console.error('Connection test error:', error.message);
-    
-    // Pesan error yang lebih spesifik
-    let errorMessage = error.message;
-    if (error.message.includes('password authentication failed')) {
-      errorMessage = 'Password database PostgreSQL salah. Periksa konfigurasi server.';
-    } else if (error.message.includes('does not exist')) {
-      errorMessage = 'Database tidak ditemukan';
-    } else if (error.message.includes('connect')) {
-      errorMessage = 'Tidak dapat terhubung ke database';
-    }
-    
-    res.status(500).json({
-      status: 'error',
-      message: errorMessage
-    });
+    res.status(500).json({ status: 'error', message: error.message });
   }
 });
-
 // Endpoint untuk pencarian produk
 app.post('/api/search', async (req, res) => {
   console.log('Search request:', req.body);
