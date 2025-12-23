@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import '../constants/app_colors.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -12,10 +12,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  // Fungsi hash MD5
-  // String hashMD5(String input) {
-  //   return md5.convert(convert.utf8.encode(input)).toString();
-  // }
 
   final _serverIpController = TextEditingController();
   final _dbNameController = TextEditingController();
@@ -33,9 +29,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _serverIpController.text =
-          prefs.getString('server_ip') ?? '192.168.1.100';
-      _dbNameController.text = prefs.getString('db_name') ?? 'inventory_db';
-      _storeCodeController.text = prefs.getString('store_code') ?? 'STORE-001';
+          prefs.getString('server_ip') ?? '10.1.10.100';
+      _dbNameController.text = prefs.getString('db_name') ?? 'stok_db';
+      _storeCodeController.text = prefs.getString('store_code') ?? 'ZJ09';
     });
   }
 
@@ -56,34 +52,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _testConnection() async {
     setState(() => _isLoading = true);
 
-    // 1. Ambil konfigurasi
-    final serverIp = _serverIpController.text.trim();
+    // 1. Ambil input dari TextField
+    final serverIp = _serverIpController.text
+        .trim(); // IP Laptop (misal: 192.168.1.10)
     final dbName = _dbNameController.text.trim();
     final storeCode = _storeCodeController.text.trim();
-    final passwordFinal = 'password'; // FIX: Gunakan password statis
 
-    // 2. Generate password
-    final passwordRaw = '$passwordFinal@$storeCode';
-    // final password = hashMD5(passwordRaw);
-    final password = passwordRaw;
+    // 2. Format Password sesuai format 'password@toko'
+    // Pastikan ini SAMA PERSIS dengan isi kolom "Password" di tabel msStoreInfo database
+    final passwordToSend = '5f4dcc3b5aa765d61d8327deb882cf99@$storeCode';
 
-    // 3. Format URL
+    // 3. Siapkan Base URL untuk menghubungi Node.js
     String baseUrl = serverIp;
     if (!baseUrl.startsWith('http')) {
-      baseUrl = 'http://$baseUrl:3000';
+      baseUrl = 'http://$baseUrl:3000'; // Port 3000 sesuai index.js
     }
 
     try {
-      // 4. Kirim request test
+      // 4. Kirim Request
       final response = await http
           .post(
             Uri.parse('$baseUrl/api/test-connection'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
+              // PENTING: 'host' di sini adalah host database DARI SUDUT PANDANG SERVER.
+              // Karena Node.js dan Postgres ada di komputer yang sama, gunakan 'localhost'
               'host': 'localhost',
               'database': dbName,
               'user': storeCode,
-              'password': password,
+              'password': passwordToSend,
             }),
           )
           .timeout(const Duration(seconds: 10));
@@ -99,6 +96,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           );
         } else {
+          // Menampilkan pesan error dari server (misal: Store Code salah)
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('❌ ${result['message']}'),
@@ -111,7 +109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('🌐 Koneksi gagal: ${e.toString()}'),
+            content: Text('🌐 Gagal terhubung ke Server API: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );

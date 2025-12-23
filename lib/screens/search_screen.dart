@@ -1,7 +1,8 @@
+import 'package:cek_sku/services/api_service.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import '../constants/app_colors.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -32,15 +33,15 @@ class _SearchScreenState extends State<SearchScreen> {
     });
 
     final prefs = await SharedPreferences.getInstance();
+    // Ambil IP Laptop tempat server Node.js berjalan
     final serverIp = prefs.getString('server_ip') ?? '192.168.1.100';
     final dbName = prefs.getString('db_name') ?? 'inventory_db';
     final storeCode = prefs.getString('store_code') ?? 'STORE-001';
 
-    // PASSWORD LOGIC (hash with MD5)
-    final passwordRaw = 'password@$storeCode';
-    // final password = hashMD5(passwordRaw);
-    final password = passwordRaw;
+    // Format password untuk dikirim ke server
+    final passwordToSend = '5f4dcc3b5aa765d61d8327deb882cf99@$storeCode';
 
+    // Siapkan URL API
     String baseUrl = serverIp;
     if (!baseUrl.startsWith('http')) {
       baseUrl = 'http://$baseUrl:3000';
@@ -54,11 +55,12 @@ class _SearchScreenState extends State<SearchScreen> {
             body: jsonEncode({
               'keyword': keyword,
               'dbConfig': {
-                'host':
-                    'localhost', // FIX: Selalu gunakan localhost untuk koneksi DB internal server
+                // 'host' ini dikirim ke Node.js. Node.js akan memakainya untuk connect ke Postgres.
+                // Jadi 'localhost' di sini artinya Localhost-nya Server, BUKAN HP.
+                'host': 'localhost', 
                 'database': dbName,
-                'user': storeCode,
-                'password': password,
+                'user': storeCode, 
+                'password': passwordToSend,
               },
             }),
           )
@@ -66,14 +68,24 @@ class _SearchScreenState extends State<SearchScreen> {
 
       if (response.statusCode == 200) {
         final result = jsonDecode(response.body);
-        if (result['status'] == 'success' &&
-            (result['data'] as List).isNotEmpty) {
-          setState(() {
-            _foundProduct = result['data'][0];
-          });
+        
+        if (result['status'] == 'success') {
+          // Cek apakah data array tidak kosong
+          final List<dynamic> products = result['data'];
+          
+          if (products.isNotEmpty) {
+            setState(() {
+              _foundProduct = products[0]; // Ambil produk pertama
+            });
+          } else {
+            setState(() {
+              _errorMessage = 'Barang tidak ditemukan.';
+            });
+          }
         } else {
-          setState(() {
-            _errorMessage = 'Barang tidak ditemukan.';
+           // Error dari logic server (misal DB error)
+           setState(() {
+            _errorMessage = result['message'] ?? 'Terjadi kesalahan di server';
           });
         }
       } else {
@@ -83,9 +95,9 @@ class _SearchScreenState extends State<SearchScreen> {
       }
     } catch (e) {
       setState(() {
-        _errorMessage =
-            'Gagal koneksi. Pastikan Server Nyala & Dalam Jaringan Yang Sama.';
+        _errorMessage = 'Gagal koneksi ke Server. Cek IP & Jaringan.';
       });
+      print("Error detail: $e"); // Untuk debugging di log
     } finally {
       setState(() {
         _isLoading = false;
@@ -234,26 +246,24 @@ class _SearchScreenState extends State<SearchScreen> {
             padding: const EdgeInsets.symmetric(vertical: 12),
             elevation: 0,
           ),
-          child: _isLoading
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
-                )
-              : const Text(
-                  "Cari",
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+            child: const Text(
+            "Cari",
+            style: TextStyle(fontWeight: FontWeight.bold),
+            ),
         ),
       ],
     );
   }
 
   Widget _buildContent({bool isTablet = false}) {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_isLoading) {
+      return const Center(
+      child: SizedBox(
+        height: 500,
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      );
+    }
     if (_errorMessage.isNotEmpty)
       return Center(
         child: Text(_errorMessage, style: const TextStyle(color: Colors.red)),

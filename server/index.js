@@ -15,9 +15,9 @@ app.use(cors({
 app.use(bodyParser.json());
 
 // Fungsi hash MD5
-// const hashMD5 = (str) => {
-//   return crypto.createHash('md5').update(str).digest('hex');
-// };
+const hashMD5 = (str) => {
+  return crypto.createHash('md5').update(str).digest('hex');
+};
 
 // Fungsi helper untuk koneksi database
 const executeQuery = async (dbConfig, queryText, params = []) => {
@@ -62,18 +62,19 @@ app.post('/api/test-connection', async (req, res) => {
 
     await client.connect();
     
-    // Query ini akan mencari password yang SAMA PERSIS (plain text) di database
     const checkQuery = `
       SELECT "StoreCode" 
       FROM "msStoreInfo" 
-      WHERE "StoreCode" = $1 AND "Password" = $2
+      WHERE "StoreCode" = $1 
+      AND ("Password" || '@' || "StoreCode") = $2
     `;
     
     const checkResult = await client.query(checkQuery, [inputStoreCode, passwordUntukDicek]);
     await client.end();
 
     if (checkResult.rows.length > 0) {
-      res.json({ status: 'success', message: `Berhasil! Login sebagai: ${inputStoreCode}` });
+      // res.json({ status: 'success', message: `Berhasil! Login sebagai: ${inputStoreCode}` });
+      res.json({ status: 'success', message: 'Tes Koneksi Server Berhasil' });
     } else {
       res.status(401).json({ status: 'error', message: 'Store Code atau Password salah' });
     }
@@ -92,13 +93,17 @@ app.post('/api/search', async (req, res) => {
       return res.json({ status: 'success', data: [] });
     }
 
-    // Hash password dari Flutter untuk koneksi
-    const hashedPassword = dbConfig.password;
+    let realPassword = dbConfig.password;
+    if (realPassword.includes('@')) {
+        // Ambil bagian sebelum tanda '@' terakhir
+        const lastAtPos = realPassword.lastIndexOf('@');
+        realPassword = realPassword.substring(0, lastAtPos);
+    }
     
     // Update dbConfig dengan password yang sudah di-hash
     const updatedDbConfig = {
       ...dbConfig,
-      password: hashedPassword
+      password: realPassword
     };
 
     const query = `
