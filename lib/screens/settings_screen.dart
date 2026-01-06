@@ -12,7 +12,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-
   final _serverIpController = TextEditingController();
   final _dbNameController = TextEditingController();
   final _storeCodeController = TextEditingController();
@@ -28,75 +27,83 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _serverIpController.text =
-          prefs.getString('server_ip') ?? '10.1.10.100';
-      _dbNameController.text = prefs.getString('db_name') ?? 'stok_db';
-      _storeCodeController.text = prefs.getString('store_code') ?? 'ZJ09';
+      _serverIpController.text = prefs.getString('server_ip') ?? '';
+      _dbNameController.text = prefs.getString('db_name') ?? '';
+      _storeCodeController.text = prefs.getString('store_code') ?? '';
     });
   }
 
-  Future<void> _saveSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('server_ip', _serverIpController.text);
-    await prefs.setString('db_name', _dbNameController.text);
-    await prefs.setString('store_code', _storeCodeController.text);
-
-    // Simpan password sesuai aturan awalan store code
-    final storeCode = _storeCodeController.text.trim();
-    String password = '';
-    if (storeCode.startsWith('Z')) {
-      password = 'ganola@$storeCode';
-    } else if (storeCode.startsWith('D')) {
-      password = 'beureum@$storeCode';
+  // VALIDASI: Memastikan semua form terisi
+  bool _validateForm() {
+    if (_serverIpController.text.trim().isEmpty ||
+        _dbNameController.text.trim().isEmpty ||
+        _storeCodeController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Semua kolom harus diisi!'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return false;
     }
-    await prefs.setString('password', password);
+    return true;
+  }
+
+  Future<void> _saveSettings() async {
+    if (!_validateForm()) return; // Validasi sebelum simpan
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('server_ip', _serverIpController.text.trim());
+    await prefs.setString('db_name', _dbNameController.text.trim());
+    await prefs.setString('store_code', _storeCodeController.text.trim());
 
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Pengaturan tersimpan!')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Pengaturan tersimpan!'),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
   }
 
-  // FUNGSI UTAMA KONEKSI KE SERVER
   Future<void> _testConnection() async {
+    if (!_validateForm()) return; // Validasi sebelum test
+
     setState(() => _isLoading = true);
 
-    // 1. Ambil input dari TextField
-    final serverIp = _serverIpController.text.trim(); // IP Laptop (misal: 192.168.1.10)
+    final serverIp = _serverIpController.text.trim();
     final dbName = _dbNameController.text.trim();
     final storeCode = _storeCodeController.text.trim();
 
-    // 2. Generate password langsung dari input storeCode
     String passwordToSend = '';
     if (storeCode.startsWith('Z')) {
-      passwordToSend = 'ganola@' + storeCode;
+      passwordToSend = 'ganola@$storeCode';
     } else if (storeCode.startsWith('D')) {
-      passwordToSend = 'beureum@' + storeCode;
+      passwordToSend = 'beureum@$storeCode';
+    } else {
+      // Jika store code tidak diawali Z atau D, server akan menolak
+      passwordToSend = 'unknown@$storeCode';
     }
 
-    // 3. Siapkan Base URL untuk menghubungi Node.js
     String baseUrl = serverIp;
     if (!baseUrl.startsWith('http')) {
-      baseUrl = 'http://$baseUrl:3000'; // Port 3000 sesuai index.js
+      baseUrl = 'http://$baseUrl:3000';
     }
 
     try {
-      // 4. Kirim Request
       final response = await http
           .post(
             Uri.parse('$baseUrl/api/test-connection'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
-              // PENTING: 'host' di sini adalah host database DARI SUDUT PANDANG SERVER.
-              // Karena Node.js dan Postgres ada di komputer yang sama, gunakan 'localhost'
               'host': 'localhost',
               'database': dbName,
               'user': storeCode,
               'password': passwordToSend,
             }),
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 5));
 
       final result = jsonDecode(response.body);
 
@@ -109,10 +116,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           );
         } else {
-          // Menampilkan pesan error dari server (misal: Store Code salah)
+          // Menampilkan pesan error spesifik dari server (misal: "database 'x' does not exist")
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('❌ ${result['message']}'),
+              content: Text('❌ ${result['message'] ?? 'Terjadi kesalahan'}'),
               backgroundColor: Colors.red,
             ),
           );
@@ -121,14 +128,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('🌐 Gagal terhubung ke Server API: ${e.toString()}'),
+          const SnackBar(
+            content: Text('🌐 Gagal terhubung ke Server. Pastikan IP dan Server Aktif.'),
             backgroundColor: Colors.red,
           ),
         );
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -145,7 +152,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: AppColors.biru,
+              color: AppColors.elzattaPurple,
             ),
           ),
           const SizedBox(height: 24),

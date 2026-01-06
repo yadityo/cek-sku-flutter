@@ -39,7 +39,7 @@ dependencies:
   # Untuk penyimpanan lokal (pengganti AsyncStorage)
   shared_preferences: ^2.2.2
   # Untuk scan barcode (pengganti expo-camera/barcode-scanner)
-  mobile_scanner: ^5.0.0
+  mobile_scanner: ^7.1.4
   crypto: ^3.0.7
   flutter_launcher_icons: ^0.14.4
   rename: ^3.1.0

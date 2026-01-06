@@ -1,5 +1,7 @@
 const express = require('express');
-const { Client } = require('pg');
+const { Pool } = require('pg');
+const dotenv = require('dotenv');
+dotenv.config();
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
@@ -19,109 +21,79 @@ const hashMD5 = (str) => {
   return crypto.createHash('md5').update(str).digest('hex');
 };
 
+// Pool global
+const pool = new Pool({
+  host: process.env.PGHOST,
+  port: process.env.PGPORT,
+  database: process.env.PGDATABASE,
+  user: process.env.PGUSER,
+  password: process.env.PGPASSWORD,
+});
+
 // Fungsi helper untuk koneksi database
 const executeQuery = async (dbConfig, queryText, params = []) => {
-  const client = new Client({
-    host: dbConfig.host || 'localhost',
-    port: 5432,
-    database: dbConfig.database,
-    user: 'postgres', // User utama PostgreSQL
-    password: 'password', // GANTI dengan password PostgreSQL Anda
-  });
-
-  try {
-    await client.connect();
-    const res = await client.query(queryText, params);
-    await client.end();
-    return res.rows;
-  } catch (err) {
-    console.error('Database query error:', err.message);
-    try { await client.end(); } catch (e) { }
-    throw err;
+  // Validasi input sederhana (anti SQL injection)
+  if (Array.isArray(params)) {
+    for (const p of params) {
+      if (typeof p === 'string' && /(;|--|\b(OR|AND)\b)/i.test(p)) {
+        throw new Error('Input mengandung karakter tidak valid');
+      }
+    }
   }
+  // Pool query
+  const res = await pool.query(queryText, params);
+  return res.rows;
 };
 
 // Endpoint untuk test koneksi
 app.post('/api/test-connection', async (req, res) => {
-  const { host, user: inputStoreCode, password: inputPassword, database } = req.body;
-
+  const { user: inputStoreCode, password: inputPassword, database } = req.body;
+  // Gunakan Pool baru dengan database dari user
+  const testPool = new Pool({
+    host: process.env.PGHOST,
+    port: process.env.PGPORT,
+    user: process.env.PGUSER,
+    password: process.env.PGPASSWORD,
+    database: database || process.env.PGDATABASE,
+  });
   try {
-    // Tampilkan di console untuk memastikan teks asli masuk
-    console.log('Password yang diterima:', inputPassword);
-
-    // Validasi password sesuai aturan awalan store code
-    let expectedPassword = '';
-    if (inputStoreCode.startsWith('Z')) {
-      expectedPassword = `ganola@${inputStoreCode}`;
-    } else if (inputStoreCode.startsWith('D')) {
-      expectedPassword = `beureum@${inputStoreCode}`;
+    // Coba query sederhana untuk memastikan database benar-benar ada
+    try {
+      await testPool.query('SELECT 1');
+    } catch (dbErr) {
+      await testPool.end();
+      return res.status(500).json({ status: 'error', message: 'Database tidak ditemukan atau salah'});
     }
-
-    if (inputPassword !== expectedPassword) {
-      console.log('Password tidak sesuai aturan!');
-      console.log('Format password yang diharapkan:', expectedPassword);
-      return res.status(401).json({ 
-        status: 'error', 
-        message: `Format password salah. Gunakan: ${expectedPassword}`
-      });
-    }
-
-    const client = new Client({
-      host: host || 'localhost',
-      port: 5432,
-      database: database,
-      user: 'postgres',
-      password: 'password_postgres_anda', 
-    });
-
-    await client.connect();
-
+    // Password di database harus polos: ganola atau beureum
+    // Kolom "Password" di msStoreInfo hanya berisi password tanpa @StoreCode
+    const dbPassword = inputPassword.split('@')[0];
     const checkQuery = `
       SELECT "StoreCode" 
       FROM "msStoreInfo" 
       WHERE "StoreCode" = $1 
       AND "Password" = $2
     `;
-
-    // Password di database harus polos: ganola atau beureum
-    // Kolom "Password" di msStoreInfo hanya berisi password tanpa @StoreCode
-    const dbPassword = inputPassword.split('@')[0];
-    const checkResult = await client.query(checkQuery, [inputStoreCode, dbPassword]);
-    await client.end();
-
+    const checkResult = await testPool.query(checkQuery, [inputStoreCode, dbPassword]);
+    await testPool.end();
     if (checkResult.rows.length > 0) {
       res.json({ status: 'success', message: 'Tes Koneksi Server Berhasil' });
     } else {
       res.status(401).json({ status: 'error', message: 'Store Code atau Password salah' });
     }
   } catch (error) {
+    await testPool.end();
     res.status(500).json({ status: 'error', message: error.message });
   }
 });
 // Endpoint untuk pencarian produk
 app.post('/api/search', async (req, res) => {
   console.log('Search request:', req.body);
-  
-  const { keyword, dbConfig } = req.body;
-
+  const { keyword } = req.body;
   try {
-    if (!keyword || keyword.trim().length === 0) {
+    // Validasi keyword (anti SQL injection)
+    if (!keyword || typeof keyword !== 'string' || keyword.trim().length === 0 || /(;|--|\b(OR|AND)\b)/i.test(keyword)) {
       return res.json({ status: 'success', data: [] });
     }
-
-    let realPassword = dbConfig.password;
-    if (realPassword.includes('@')) {
-        // Ambil bagian sebelum tanda '@' terakhir
-        const lastAtPos = realPassword.lastIndexOf('@');
-        realPassword = realPassword.substring(0, lastAtPos);
-    }
-    
-    // Update dbConfig dengan password yang sudah di-hash
-    const updatedDbConfig = {
-      ...dbConfig,
-      password: realPassword
-    };
-
     const query = `
       SELECT 
         "Description" as name, 
@@ -134,17 +106,13 @@ app.post('/api/search', async (req, res) => {
       ORDER BY "LastUpdate" DESC
       LIMIT 1
     `;
-
     const values = [`%${keyword}%`];
-    
-    const products = await executeQuery(updatedDbConfig, query, values);
-    
+    const products = await pool.query(query, values);
     res.json({ 
       status: 'success', 
-      data: products,
-      count: products.length 
+      data: products.rows,
+      count: products.rowCount 
     });
-
   } catch (error) {
     console.error('Search error:', error.message);
     res.status(500).json({ 

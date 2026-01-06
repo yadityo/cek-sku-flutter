@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import '../constants/app_colors.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import '../services/api_service.dart';
 
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
@@ -17,50 +17,39 @@ class _ScanScreenState extends State<ScanScreen> {
   bool _isProcessing = false;
   Map<String, dynamic>? _foundProduct; // Menyimpan data produk hasil scan
 
+  DateTime? _lastScanTime;
   void _onDetect(BarcodeCapture capture) async {
     if (_isProcessing) return;
     final barcode = capture.barcodes.firstOrNull?.rawValue;
+    final now = DateTime.now();
     if (barcode != null && barcode != _barcode) {
+      // Debounce: minimal 1.5 detik antar scan
+      if (_lastScanTime != null && now.difference(_lastScanTime!) < const Duration(milliseconds: 1500)) return;
+      _lastScanTime = now;
       setState(() {
         _isProcessing = true;
         _barcode = barcode;
         _foundProduct = null;
       });
-
-      // Ambil konfigurasi server dari SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       final serverIp = prefs.getString('server_ip') ?? '192.168.1.100';
-      final dbName = prefs.getString('db_name') ?? 'inventory_db';
       final storeCode = prefs.getString('store_code') ?? 'STORE-001';
-      final passwordRaw = '$storeCode-password'; // Password asli
-      final password = passwordRaw; // Tidak di-hash MD5, kirim string asli
-
       String baseUrl = serverIp;
       if (!baseUrl.startsWith('http')) {
         baseUrl = 'http://$baseUrl:3000';
       }
-
       try {
-        final response = await http
-            .post(
-              Uri.parse('$baseUrl/api/search'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'keyword': barcode,
-                'dbConfig': {
-                  'host': 'localhost',
-                  'database': dbName,
-                  'user': storeCode,
-                  'password': password,
-                },
-              }),
-            )
-            .timeout(const Duration(seconds: 10));
-
+        final response = await ApiService.postRequest(
+          baseUrl: baseUrl,
+          endpoint: '/api/search',
+          body: {
+            'keyword': barcode,
+            'user': storeCode,
+          },
+        );
         if (response.statusCode == 200) {
           final result = jsonDecode(response.body);
-          if (result['status'] == 'success' &&
-              (result['data'] as List).isNotEmpty) {
+          if (result['status'] == 'success' && (result['data'] as List).isNotEmpty) {
             setState(() {
               _foundProduct = result['data'][0];
             });
@@ -211,7 +200,7 @@ class _ScanScreenState extends State<ScanScreen> {
             height: 160,
             decoration: BoxDecoration(
               border: Border.all(
-                color: Colors.blueAccent.withOpacity(0.5),
+                color: const Color.fromARGB(127, 33, 150, 243),
                 width: 2,
               ),
               borderRadius: BorderRadius.circular(20),
@@ -352,9 +341,9 @@ class _ScanScreenState extends State<ScanScreen> {
                     ),
                     child: Column(
                       children: [
-                        const Text(
+                        Text(
                           "Stock Saat Ini",
-                          style: TextStyle(color: Colors.white70),
+                          style: TextStyle(color: Color.fromARGB(179, 255, 255, 255)),
                         ),
                         Text(
                           "${_foundProduct?['quantity']?.toString() ?? '0'} unit",

@@ -18,82 +18,55 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _isLoading = false;
   String _errorMessage = '';
 
+  @override
+  Widget build(BuildContext context) {
+    final isTablet = MediaQuery.of(context).size.width > 768;
+    return isTablet ? _buildTabletView(context) : _buildMobileView(context);
+  }
+
   Future<void> _performSearch() async {
     final keyword = _searchController.text.trim();
     if (keyword.isEmpty) return;
-
     setState(() {
       _isLoading = true;
       _errorMessage = '';
       _foundProduct = null;
     });
-
     final prefs = await SharedPreferences.getInstance();
-    // Ambil IP Laptop tempat server Node.js berjalan
     final serverIp = prefs.getString('server_ip') ?? '192.168.1.100';
-    final dbName = prefs.getString('db_name') ?? 'inventory_db';
     final storeCode = prefs.getString('store_code') ?? 'STORE-001';
-
-    // Ambil password dari SharedPreferences
-    final passwordToSend = prefs.getString('password');
-
-    // Siapkan URL API
     String baseUrl = serverIp;
     if (!baseUrl.startsWith('http')) {
       baseUrl = 'http://$baseUrl:3000';
     }
-
     try {
-      final response = await http
-          .post(
-            Uri.parse('$baseUrl/api/search'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'keyword': keyword,
-              'dbConfig': {
-                // 'host' ini dikirim ke Node.js. Node.js akan memakainya untuk connect ke Postgres.
-                // Jadi 'localhost' di sini artinya Localhost-nya Server, BUKAN HP.
-                'host': 'localhost',
-                'database': dbName,
-                'user': storeCode,
-                'password': passwordToSend,
-              },
-            }),
-          )
-          .timeout(const Duration(seconds: 10));
-
+      final response = await ApiService.postRequest(
+        baseUrl: baseUrl,
+        endpoint: '/api/search',
+        body: {
+          'keyword': keyword,
+          'user': storeCode,
+        },
+      );
       if (response.statusCode == 200) {
         final result = jsonDecode(response.body);
-
         if (result['status'] == 'success') {
-          // Cek apakah data array tidak kosong
           final List<dynamic> products = result['data'];
-
           if (products.isNotEmpty) {
             setState(() {
-              _foundProduct = products[0]; // Ambil produk pertama
+              _foundProduct = products[0];
             });
           } else {
-            setState(() {
-              _errorMessage = 'Barang tidak ditemukan.';
-            });
+            _showNotFoundDialog();
           }
         } else {
-          // Error dari logic server (misal DB error)
-          setState(() {
-            _errorMessage = result['message'] ?? 'Terjadi kesalahan di server';
-          });
+          _showErrorDialog(result['message'] ?? 'Terjadi kesalahan di server');
         }
       } else {
-        setState(() {
-          _errorMessage = 'Error Server: ${response.statusCode}';
-        });
+        _showErrorDialog('Error Server: ${response.statusCode}');
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Gagal koneksi ke Server. Cek IP & Jaringan.';
-      });
-      print("Error detail: $e"); // Untuk debugging di log
+      _showErrorDialog('Gagal koneksi ke Server. Cek IP & Jaringan.');
     } finally {
       setState(() {
         _isLoading = false;
@@ -101,10 +74,42 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final isTablet = MediaQuery.of(context).size.width > 768;
-    return isTablet ? _buildTabletView(context) : _buildMobileView(context);
+  void _showNotFoundDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Data Tidak Ditemukan'),
+        content: const Text('Barang tidak ditemukan di database.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    setState(() {
+      _errorMessage = '';
+    });
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Terjadi Kesalahan'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    setState(() {
+      _errorMessage = '';
+    });
   }
 
   Widget _buildMobileView(BuildContext context) {
@@ -285,17 +290,19 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
       );
     }
-    if (_errorMessage.isNotEmpty)
+    if (_errorMessage.isNotEmpty) {
       return Center(
         child: Text(_errorMessage, style: const TextStyle(color: Colors.red)),
       );
-    if (_foundProduct == null)
+    }
+    if (_foundProduct == null) {
       return Center(
         child: Text(
           "Silakan cari barang.",
           style: const TextStyle(color: AppColors.slate400),
         ),
       );
+    }
 
     return _buildProductCard(
       name: _foundProduct!['name'] ?? 'Unknown',
@@ -317,11 +324,11 @@ class _SearchScreenState extends State<SearchScreen> {
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: AppColors.slate100),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
+                BoxShadow(
+                  color: const Color.fromARGB(13, 0, 0, 0),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
         ],
       ),
       padding: const EdgeInsets.all(24),
@@ -374,7 +381,7 @@ class _SearchScreenState extends State<SearchScreen> {
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.biru.withOpacity(0.3),
+                  color: const Color.fromARGB(77, 0, 122, 255),
                   blurRadius: 12,
                   offset: const Offset(0, 6),
                 ),
@@ -384,8 +391,8 @@ class _SearchScreenState extends State<SearchScreen> {
               children: [
                 Text(
                   "Stock Saat Ini",
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
+                  style: const TextStyle(
+                    color: Color.fromARGB(204, 255, 255, 255),
                     fontSize: 14,
                   ),
                 ),
