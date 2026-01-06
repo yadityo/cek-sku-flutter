@@ -16,8 +16,8 @@ class SkuCheckerApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         scaffoldBackgroundColor: AppColors.slate50,
-        primaryColor: AppColors.elzattaPurple,
-        colorScheme: ColorScheme.fromSeed(seedColor: AppColors.elzattaPurple),
+        primaryColor: AppColors.biru,
+        colorScheme: ColorScheme.fromSeed(seedColor: AppColors.biru),
         useMaterial3: true,
         fontFamily: 'Poppins',
       ),

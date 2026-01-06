@@ -67,9 +67,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final dbName = _dbNameController.text.trim();
     final storeCode = _storeCodeController.text.trim();
 
-    // 2. Ambil password dari SharedPreferences (sudah disimpan sesuai aturan di _saveSettings)
-    final prefs = await SharedPreferences.getInstance();
-    final passwordToSend = prefs.getString('password') ?? '';
+    // 2. Generate password langsung dari input storeCode
+    String passwordToSend = '';
+    if (storeCode.startsWith('Z')) {
+      passwordToSend = 'ganola@' + storeCode;
+    } else if (storeCode.startsWith('D')) {
+      passwordToSend = 'beureum@' + storeCode;
+    }
 
     // 3. Siapkan Base URL untuk menghubungi Node.js
     String baseUrl = serverIp;
@@ -230,6 +234,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     IconData icon,
     TextEditingController controller,
   ) {
+    // Jangan tampilkan field password ke user
+    if (label.toLowerCase().contains('password')) {
+      return const SizedBox.shrink();
+    }
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
