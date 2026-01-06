@@ -18,10 +18,6 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _isLoading = false;
   String _errorMessage = '';
 
-  // String hashMD5(String input) {
-  //   return md5.convert(convert.utf8.encode(input)).toString();
-  // }
-
   Future<void> _performSearch() async {
     final keyword = _searchController.text.trim();
     if (keyword.isEmpty) return;
@@ -38,8 +34,8 @@ class _SearchScreenState extends State<SearchScreen> {
     final dbName = prefs.getString('db_name') ?? 'inventory_db';
     final storeCode = prefs.getString('store_code') ?? 'STORE-001';
 
-    // Format password untuk dikirim ke server
-    final passwordToSend = '5f4dcc3b5aa765d61d8327deb882cf99@$storeCode';
+    // Ambil password dari SharedPreferences
+    final passwordToSend = prefs.getString('password');
 
     // Siapkan URL API
     String baseUrl = serverIp;
@@ -57,9 +53,9 @@ class _SearchScreenState extends State<SearchScreen> {
               'dbConfig': {
                 // 'host' ini dikirim ke Node.js. Node.js akan memakainya untuk connect ke Postgres.
                 // Jadi 'localhost' di sini artinya Localhost-nya Server, BUKAN HP.
-                'host': 'localhost', 
+                'host': 'localhost',
                 'database': dbName,
-                'user': storeCode, 
+                'user': storeCode,
                 'password': passwordToSend,
               },
             }),
@@ -68,11 +64,11 @@ class _SearchScreenState extends State<SearchScreen> {
 
       if (response.statusCode == 200) {
         final result = jsonDecode(response.body);
-        
+
         if (result['status'] == 'success') {
           // Cek apakah data array tidak kosong
           final List<dynamic> products = result['data'];
-          
+
           if (products.isNotEmpty) {
             setState(() {
               _foundProduct = products[0]; // Ambil produk pertama
@@ -83,8 +79,8 @@ class _SearchScreenState extends State<SearchScreen> {
             });
           }
         } else {
-           // Error dari logic server (misal DB error)
-           setState(() {
+          // Error dari logic server (misal DB error)
+          setState(() {
             _errorMessage = result['message'] ?? 'Terjadi kesalahan di server';
           });
         }
@@ -116,14 +112,28 @@ class _SearchScreenState extends State<SearchScreen> {
       children: [
         Container(
           padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
-          color: Colors.white,
+          color: AppColors.biruMudaAbu,
           child: Column(
             children: [
-              Image.asset(
-                'images/elzatta-logo.png',
-                height: 36,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) => const SizedBox(),
+              Row(
+                children: [
+                  Image.asset(
+                    'images/bestock-logo.png',
+                    height: 32,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) =>
+                        const SizedBox(),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'beStock',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.biru,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
               _buildSearchBar(),
@@ -147,7 +157,7 @@ class _SearchScreenState extends State<SearchScreen> {
           width: 320,
           decoration: const BoxDecoration(
             color: Colors.white,
-            border: Border(right: BorderSide(color: AppColors.slate200)),
+            border: Border(right: BorderSide(color: AppColors.biruMudaAbu)),
           ),
           child: Column(
             children: [
@@ -156,14 +166,25 @@ class _SearchScreenState extends State<SearchScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Center(
-                      child: Image.asset(
-                        'images/elzatta-logo.png',
-                        height: 36,
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const SizedBox(),
-                      ),
+                    Row(
+                      children: [
+                        Image.asset(
+                          'images/bestock-logo.png',
+                          height: 36,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const SizedBox(),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'beStock',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.elzattaPurple,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 16),
                     _buildSearchBar(),
@@ -213,7 +234,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     )
                   : null,
               filled: true,
-              fillColor: AppColors.slate50,
+              fillColor: Colors.white,
               contentPadding: const EdgeInsets.symmetric(vertical: 12),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(50),
@@ -226,7 +247,7 @@ class _SearchScreenState extends State<SearchScreen> {
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(50),
                 borderSide: const BorderSide(
-                  color: AppColors.elzattaPurple,
+                  color: AppColors.biru,
                   width: 2,
                 ),
               ),
@@ -238,7 +259,7 @@ class _SearchScreenState extends State<SearchScreen> {
         ElevatedButton(
           onPressed: _isLoading ? null : _performSearch,
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.elzattaPurple,
+            backgroundColor: AppColors.biru,
             foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(50),
@@ -246,10 +267,10 @@ class _SearchScreenState extends State<SearchScreen> {
             padding: const EdgeInsets.symmetric(vertical: 12),
             elevation: 0,
           ),
-            child: const Text(
+          child: const Text(
             "Cari",
             style: TextStyle(fontWeight: FontWeight.bold),
-            ),
+          ),
         ),
       ],
     );
@@ -258,10 +279,10 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _buildContent({bool isTablet = false}) {
     if (_isLoading) {
       return const Center(
-      child: SizedBox(
-        height: 500,
-        child: Center(child: CircularProgressIndicator()),
-      ),
+        child: SizedBox(
+          height: 500,
+          child: Center(child: CircularProgressIndicator()),
+        ),
       );
     }
     if (_errorMessage.isNotEmpty)
@@ -316,7 +337,7 @@ class _SearchScreenState extends State<SearchScreen> {
             child: Icon(
               Icons.checkroom,
               size: isTablet ? 64 : 48,
-              color: AppColors.elzattaPurple,
+              color: AppColors.biru,
             ),
           ),
           const SizedBox(height: 24),
@@ -349,15 +370,11 @@ class _SearchScreenState extends State<SearchScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.elzattaDarkPurple, AppColors.elzattaPurple],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+              color: AppColors.biru,
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.elzattaPurple.withOpacity(0.3),
+                  color: AppColors.biru.withOpacity(0.3),
                   blurRadius: 12,
                   offset: const Offset(0, 6),
                 ),

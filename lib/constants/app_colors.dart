@@ -16,5 +16,8 @@ class AppColors {
 
   static const elzattaPurple = Color(0xFF6C3756);
   static const elzattaDarkPurple = Color(0xFF3C1053);
-  static const green500 = Color(0xFF22C55E);
+  static const biruMudaAbu = Color(0xFFD4E4F1);
+  static const biru = Color(0xFF1976D2);
+  static const hijau = Color(0xFF2E7D32);
+  static const orange = Color(0xFFF57C00);
 }

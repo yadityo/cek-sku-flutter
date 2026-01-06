@@ -53,8 +53,8 @@ class _MainScreenState extends State<MainScreen> {
         child: BottomNavigationBar(
           currentIndex: _selectedIndex,
           onTap: _onItemTapped,
-          backgroundColor: Colors.white,
-          selectedItemColor: AppColors.elzattaPurple,
+          backgroundColor: AppColors.biruMudaAbu,
+          selectedItemColor: AppColors.biru,
           unselectedItemColor: AppColors.slate400,
           showUnselectedLabels: true,
           type: BottomNavigationBarType.fixed,
@@ -82,14 +82,14 @@ class _MainScreenState extends State<MainScreen> {
           NavigationRail(
             selectedIndex: _selectedIndex,
             onDestinationSelected: _onItemTapped,
-            backgroundColor: Colors.white,
+            backgroundColor: AppColors.biruMudaAbu,
             indicatorColor: AppColors.blue50,
             selectedIconTheme: const IconThemeData(
-              color: AppColors.elzattaPurple,
+              color: AppColors.biru,
             ),
             unselectedIconTheme: const IconThemeData(color: AppColors.slate600),
             selectedLabelTextStyle: const TextStyle(
-              color: AppColors.elzattaPurple,
+              color: AppColors.biru,
             ),
             unselectedLabelTextStyle: const TextStyle(
               color: AppColors.slate600,
@@ -140,4 +140,4 @@ class _MainScreenState extends State<MainScreen> {
       ),
     );
   }
-}
+} 

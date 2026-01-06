@@ -12,7 +12,7 @@ class SkuCheckerApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'SKU Checker',
+      title: 'Cek Stock',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         scaffoldBackgroundColor: AppColors.slate50,

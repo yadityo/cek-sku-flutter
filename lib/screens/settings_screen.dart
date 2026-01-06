@@ -41,6 +41,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await prefs.setString('db_name', _dbNameController.text);
     await prefs.setString('store_code', _storeCodeController.text);
 
+    // Simpan password sesuai aturan awalan store code
+    final storeCode = _storeCodeController.text.trim();
+    String password = '';
+    if (storeCode.startsWith('Z')) {
+      password = 'ganola@$storeCode';
+    } else if (storeCode.startsWith('D')) {
+      password = 'beureum@$storeCode';
+    }
+    await prefs.setString('password', password);
+
     if (mounted) {
       ScaffoldMessenger.of(
         context,
@@ -53,14 +63,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _isLoading = true);
 
     // 1. Ambil input dari TextField
-    final serverIp = _serverIpController.text
-        .trim(); // IP Laptop (misal: 192.168.1.10)
+    final serverIp = _serverIpController.text.trim(); // IP Laptop (misal: 192.168.1.10)
     final dbName = _dbNameController.text.trim();
     final storeCode = _storeCodeController.text.trim();
 
-    // 2. Format Password sesuai format 'password@toko'
-    // Pastikan ini SAMA PERSIS dengan isi kolom "Password" di tabel msStoreInfo database
-    final passwordToSend = '5f4dcc3b5aa765d61d8327deb882cf99@$storeCode';
+    // 2. Ambil password dari SharedPreferences (sudah disimpan sesuai aturan di _saveSettings)
+    final prefs = await SharedPreferences.getInstance();
+    final passwordToSend = prefs.getString('password') ?? '';
 
     // 3. Siapkan Base URL untuk menghubungi Node.js
     String baseUrl = serverIp;
@@ -132,7 +141,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: AppColors.slate900,
+              color: AppColors.biru,
             ),
           ),
           const SizedBox(height: 24),
@@ -167,7 +176,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : const Icon(Icons.network_check),
                   label: const Text("Test Koneksi"),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color.fromARGB(255, 158, 78, 125),
+                    backgroundColor: AppColors.orange,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
@@ -183,7 +192,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: const Icon(Icons.save),
                   label: const Text("Simpan"),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.elzattaPurple,
+                    backgroundColor: AppColors.hijau,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
@@ -233,7 +242,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Row(
             children: [
-              Icon(icon, size: 20, color: AppColors.elzattaPurple),
+              Icon(icon, size: 20, color: AppColors.biru),
               const SizedBox(width: 8),
               Text(
                 label,
@@ -257,7 +266,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.elzattaPurple),
+                borderSide: const BorderSide(color: AppColors.biru),
               ),
             ),
           ),

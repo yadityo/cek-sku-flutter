@@ -49,9 +49,23 @@ app.post('/api/test-connection', async (req, res) => {
     // Tampilkan di console untuk memastikan teks asli masuk
     console.log('Password yang diterima:', inputPassword);
 
-    // LANGKAH PENTING: Jangan di-hash!
-    const passwordUntukDicek = inputPassword; 
-    
+    // Validasi password sesuai aturan awalan store code
+    let expectedPassword = '';
+    if (inputStoreCode.startsWith('Z')) {
+      expectedPassword = `ganola@${inputStoreCode}`;
+    } else if (inputStoreCode.startsWith('D')) {
+      expectedPassword = `beureum@${inputStoreCode}`;
+    }
+
+    if (inputPassword !== expectedPassword) {
+      console.log('Password tidak sesuai aturan!');
+      console.log('Format password yang diharapkan:', expectedPassword);
+      return res.status(401).json({ 
+        status: 'error', 
+        message: `Format password salah. Gunakan: ${expectedPassword}`
+      });
+    }
+
     const client = new Client({
       host: host || 'localhost',
       port: 5432,
@@ -61,19 +75,21 @@ app.post('/api/test-connection', async (req, res) => {
     });
 
     await client.connect();
-    
+
     const checkQuery = `
       SELECT "StoreCode" 
       FROM "msStoreInfo" 
       WHERE "StoreCode" = $1 
-      AND ("Password" || '@' || "StoreCode") = $2
+      AND "Password" = $2
     `;
-    
-    const checkResult = await client.query(checkQuery, [inputStoreCode, passwordUntukDicek]);
+
+    // Password di database harus polos: ganola atau beureum
+    // Kolom "Password" di msStoreInfo hanya berisi password tanpa @StoreCode
+    const dbPassword = inputPassword.split('@')[0];
+    const checkResult = await client.query(checkQuery, [inputStoreCode, dbPassword]);
     await client.end();
 
     if (checkResult.rows.length > 0) {
-      // res.json({ status: 'success', message: `Berhasil! Login sebagai: ${inputStoreCode}` });
       res.json({ status: 'success', message: 'Tes Koneksi Server Berhasil' });
     } else {
       res.status(401).json({ status: 'error', message: 'Store Code atau Password salah' });
