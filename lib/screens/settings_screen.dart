@@ -56,6 +56,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await prefs.setString('db_name', _dbNameController.text.trim());
     await prefs.setString('store_code', _storeCodeController.text.trim());
 
+    await PostgresService.resetPool();
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -77,18 +79,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final storeCode = _storeCodeController.text.trim();
 
     
-    String dbConnectionPassword = '';
-    String appPassword = '';
-    if (storeCode.toUpperCase().startsWith('Z')) {
-      appPassword = 'gula@$storeCode';
-      dbConnectionPassword = 'gula';
-    } else if (storeCode.toUpperCase().startsWith('D')) {
-      appPassword = 'jawa@$storeCode';
-      dbConnectionPassword = 'jawa';
-    } else {
-      appPassword = 'unknown@$storeCode';
-      dbConnectionPassword = 'unknown';
-    }
+    String dbConnectionPassword = PostgresService.determinePassword(storeCode);
 
     debugPrint("--- DEBUG KONEKSI ---");
     debugPrint("IP: $serverIp");
@@ -96,6 +87,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       "Store Code Input: '$storeCode'",
     );
     debugPrint("Password yang dikirim: '$dbConnectionPassword'");
+    
     try {
       final dbService = PostgresService(
         host: serverIp,

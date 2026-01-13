@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_colors.dart';
-import '../services/postgres_service.dart'; 
+import '../services/postgres_service.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -12,108 +11,109 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
+  
+  // Cache service agar tidak connect ulang terus menerus
+  PostgresService? _dbService;
+  
   Map<String, dynamic>? _foundProduct;
   bool _isLoading = false;
+  bool _hasSearched = false; // Untuk membedakan belum cari vs tidak ketemu
   String _errorMessage = '';
 
   @override
-  Widget build(BuildContext context) {
-    final isTablet = MediaQuery.of(context).size.width > 768;
-    return isTablet ? _buildTabletView(context) : _buildMobileView(context);
+  void initState() {
+    super.initState();
+    _initDb();
+  }
+
+  @override
+  void dispose() {
+    // 1. OPTIMASI: Wajib dispose controller untuk cegah memory leak
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // 2. OPTIMASI: Init DB di awal
+  Future<void> _initDb() async {
+    try {
+      _dbService = await PostgresService.createFromPrefs();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = "Gagal inisialisasi Database. Cek koneksi.";
+        });
+      }
+    }
   }
 
   Future<void> _performSearch() async {
     final keyword = _searchController.text.trim();
     if (keyword.isEmpty) return;
 
+    // 3. OPTIMASI: Tutup keyboard saat mulai mencari
+    FocusScope.of(context).unfocus();
+
     setState(() {
       _isLoading = true;
       _errorMessage = '';
       _foundProduct = null;
+      _hasSearched = true; 
     });
 
-    final prefs = await SharedPreferences.getInstance();
-    final serverIp = prefs.getString('server_ip') ?? '192.168.1.100';
-    final dbName = prefs.getString('db_name') ?? 'inventory_db';
-    
-    
-    
-    final dbPassword = 'password'; 
-
     try {
-      
-      final dbService = PostgresService(
-        host: serverIp,
-        databaseName: dbName,
-        username: 'postgres', 
-        password: dbPassword,
-      );
+      // Pastikan service ada, jika null coba init lagi
+      _dbService ??= await PostgresService.createFromPrefs();
 
-      
-      final result = await dbService.searchProduct(keyword);
+      final result = await _dbService!.searchProduct(keyword);
+
+      // 4. OPTIMASI: Cek mounted sebelum update UI setelah proses async
+      if (!mounted) return;
 
       if (result != null) {
         setState(() {
           _foundProduct = result;
         });
       } else {
-        _showNotFoundDialog();
+        // Kita tidak pakai dialog lagi agar UX lebih smooth,
+        // status not found ditangani di _buildContent
+        setState(() {
+          _foundProduct = null;
+        });
       }
     } catch (e) {
-      
-      _showErrorDialog('Gagal koneksi ke Database.\nError: $e');
-    } finally {
+      if (!mounted) return;
       setState(() {
-        _isLoading = false;
+        _errorMessage = 'Gagal koneksi ke Database.\nError: ${e.toString().split('\n').first}';
       });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
-  void _showNotFoundDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Data Tidak Ditemukan'),
-        content: const Text('Barang tidak ditemukan di database.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
+  @override
+  Widget build(BuildContext context) {
+    // Menggunakan LayoutBuilder lebih aman untuk responsivitas
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isTablet = constraints.maxWidth > 768;
+        return Scaffold(
+           // Tambahkan background color agar konsisten
+           backgroundColor: Colors.white,
+           body: isTablet ? _buildTabletView(context) : _buildMobileView(context),
+        );
+      },
     );
-    setState(() {
-      _errorMessage = '';
-    });
   }
 
-  void _showErrorDialog(String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Terjadi Kesalahan'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-    setState(() {
-      _errorMessage = '';
-    });
-  }
-
-  
-  
   Widget _buildMobileView(BuildContext context) {
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 16), // Top padding disesuaikan safe area
           color: AppColors.biruMudaAbu,
           child: Column(
             children: [
@@ -123,8 +123,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     'images/bestock-logo.png',
                     height: 32,
                     fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) =>
-                        const SizedBox(),
+                    errorBuilder: (ctx, err, stack) => const Icon(Icons.inventory, color: AppColors.biru),
                   ),
                   const SizedBox(width: 12),
                   const Text(
@@ -164,7 +163,7 @@ class _SearchScreenState extends State<SearchScreen> {
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 48, 16, 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -174,8 +173,7 @@ class _SearchScreenState extends State<SearchScreen> {
                           'images/bestock-logo.png',
                           height: 36,
                           fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const SizedBox(),
+                          errorBuilder: (ctx, err, stack) => const Icon(Icons.inventory, color: AppColors.biru),
                         ),
                         const SizedBox(width: 12),
                         const Text(
@@ -197,12 +195,15 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ),
         Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 600),
-                child: _buildContent(isTablet: true),
+          child: Container(
+            color: Colors.grey.shade50, // Background sedikit abu untuk tablet content area
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(32),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  child: _buildContent(isTablet: true),
+                ),
               ),
             ),
           ),
@@ -217,9 +218,11 @@ class _SearchScreenState extends State<SearchScreen> {
         Expanded(
           child: TextField(
             controller: _searchController,
+            textInputAction: TextInputAction.search, // Keyboard enter icon jadi search
             onSubmitted: (_) => _performSearch(),
             onChanged: (value) {
-              setState(() {});
+               // Optional: Rebuild UI untuk show/hide clear button
+               setState(() {}); 
             },
             decoration: InputDecoration(
               hintText: "Cari Barang/SKU...",
@@ -229,7 +232,11 @@ class _SearchScreenState extends State<SearchScreen> {
                       icon: const Icon(Icons.cancel, color: AppColors.slate400),
                       onPressed: () {
                         _searchController.clear();
-                        setState(() {});
+                        setState(() {
+                          _hasSearched = false;
+                          _foundProduct = null;
+                          _errorMessage = '';
+                        });
                       },
                     )
                   : null,
@@ -246,10 +253,7 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(50),
-                borderSide: const BorderSide(
-                  color: AppColors.biru,
-                  width: 2,
-                ),
+                borderSide: const BorderSide(color: AppColors.biru, width: 2),
               ),
             ),
           ),
@@ -263,13 +267,12 @@ class _SearchScreenState extends State<SearchScreen> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(50),
             ),
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
             elevation: 0,
           ),
-          child: const Text(
-            "Cari",
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
+          child: _isLoading 
+            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+            : const Text("Cari", style: TextStyle(fontWeight: FontWeight.bold)),
         ),
       ],
     );
@@ -278,26 +281,86 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _buildContent({bool isTablet = false}) {
     if (_isLoading) {
       return const Center(
-        child: SizedBox(
-          height: 500,
-          child: Center(child: CircularProgressIndicator()),
-        ),
-      );
-    }
-    if (_errorMessage.isNotEmpty) {
-      return Center(
-        child: Text(_errorMessage, style: const TextStyle(color: Colors.red)),
-      );
-    }
-    if (_foundProduct == null) {
-      return const Center(
-        child: Text(
-          "Silakan cari barang.",
-          style: TextStyle(color: AppColors.slate400),
+        child: Padding(
+          padding: EdgeInsets.all(40.0),
+          child: CircularProgressIndicator(),
         ),
       );
     }
 
+    if (_errorMessage.isNotEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 60, color: Colors.red),
+            const SizedBox(height: 16),
+            Text(
+              _errorMessage, 
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.red),
+            ),
+             const SizedBox(height: 16),
+             ElevatedButton(
+               onPressed: _initDb, // Coba connect ulang
+               child: const Text("Coba Koneksi Ulang"),
+             )
+          ],
+        ),
+      );
+    }
+
+    // Kondisi 1: Belum pernah mencari
+    if (!_hasSearched) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search_rounded, size: 80, color: AppColors.slate200),
+            const SizedBox(height: 16),
+            const Text(
+              "Silakan masukkan SKU atau Nama Barang\nuntuk memulai pencarian.",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.slate400),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Kondisi 2: Sudah cari, tapi hasil null (Tidak Ditemukan)
+    // 5. OPTIMASI UX: Ganti Dialog dengan tampilan in-body
+    if (_foundProduct == null) {
+      return Center(
+        child: Container(
+          padding: const EdgeInsets.all(32),
+          decoration: BoxDecoration(
+            color: Colors.red.shade50,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.red.shade100),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.search_off_rounded, size: 60, color: Colors.red.shade300),
+              const SizedBox(height: 16),
+              Text(
+                "Data Tidak Ditemukan",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red.shade800),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Barang '${_searchController.text}' tidak ada di database.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.red.shade600),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Kondisi 3: Barang Ditemukan
     return _buildProductCard(
       name: _foundProduct!['name'] ?? 'Unknown',
       sku: _foundProduct!['sku'] ?? '-',
