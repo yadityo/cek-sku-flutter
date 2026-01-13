@@ -80,11 +80,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     String dbConnectionPassword = '';
     String appPassword = '';
     if (storeCode.toUpperCase().startsWith('Z')) {
-      appPassword = 'ganola@$storeCode';
-      dbConnectionPassword = 'ganola';
+      appPassword = 'gula@$storeCode';
+      dbConnectionPassword = 'gula';
     } else if (storeCode.toUpperCase().startsWith('D')) {
-      appPassword = 'beureum@$storeCode';
-      dbConnectionPassword = 'beureum';
+      appPassword = 'jawa@$storeCode';
+      dbConnectionPassword = 'jawa';
     } else {
       appPassword = 'unknown@$storeCode';
       dbConnectionPassword = 'unknown';
