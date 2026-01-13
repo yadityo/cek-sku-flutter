@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
 import '../constants/app_colors.dart';
+import '../services/postgres_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -33,7 +32,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  // VALIDASI: Memastikan semua form terisi
+  
   bool _validateForm() {
     if (_serverIpController.text.trim().isEmpty ||
         _dbNameController.text.trim().isEmpty ||
@@ -50,7 +49,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _saveSettings() async {
-    if (!_validateForm()) return; // Validasi sebelum simpan
+    if (!_validateForm()) return; 
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('server_ip', _serverIpController.text.trim());
@@ -68,74 +67,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _testConnection() async {
-    if (!_validateForm()) return; // Validasi sebelum test
+    if (!_validateForm()) return;
 
     setState(() => _isLoading = true);
 
+    
     final serverIp = _serverIpController.text.trim();
     final dbName = _dbNameController.text.trim();
     final storeCode = _storeCodeController.text.trim();
 
-    String passwordToSend = '';
-    if (storeCode.startsWith('Z')) {
-      passwordToSend = 'ganola@$storeCode';
-    } else if (storeCode.startsWith('D')) {
-      passwordToSend = 'beureum@$storeCode';
+    
+    String dbConnectionPassword = '';
+    String appPassword = '';
+    if (storeCode.toUpperCase().startsWith('Z')) {
+      appPassword = 'ganola@$storeCode';
+      dbConnectionPassword = 'ganola';
+    } else if (storeCode.toUpperCase().startsWith('D')) {
+      appPassword = 'beureum@$storeCode';
+      dbConnectionPassword = 'beureum';
     } else {
-      // Jika store code tidak diawali Z atau D, server akan menolak
-      passwordToSend = 'unknown@$storeCode';
+      appPassword = 'unknown@$storeCode';
+      dbConnectionPassword = 'unknown';
     }
 
-    String baseUrl = serverIp;
-    if (!baseUrl.startsWith('http')) {
-      baseUrl = 'http://$baseUrl:3000';
-    }
-
+    debugPrint("--- DEBUG KONEKSI ---");
+    debugPrint("IP: $serverIp");
+    debugPrint(
+      "Store Code Input: '$storeCode'",
+    );
+    debugPrint("Password yang dikirim: '$dbConnectionPassword'");
     try {
-      final response = await http
-          .post(
-            Uri.parse('$baseUrl/api/test-connection'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'host': 'localhost',
-              'database': dbName,
-              'user': storeCode,
-              'password': passwordToSend,
-            }),
-          )
-          .timeout(const Duration(seconds: 5));
+      final dbService = PostgresService(
+        host: serverIp,
+        databaseName: dbName,
+        username: 'postgres', 
+        password:
+            dbConnectionPassword, 
+      );
 
-      final result = jsonDecode(response.body);
+      await dbService.testConnection();
 
       if (mounted) {
-        if (response.statusCode == 200) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✅ ${result['message']}'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        } else {
-          // Menampilkan pesan error spesifik dari server (misal: "database 'x' does not exist")
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('❌ ${result['message'] ?? 'Terjadi kesalahan'}'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Koneksi Database Berhasil!'),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🌐 Gagal terhubung ke Server. Pastikan IP dan Server Aktif.'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('❌ Gagal: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      setState(() => _isLoading = false);
     }
   }
 
@@ -152,7 +139,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: AppColors.elzattaPurple,
+              color: AppColors.biru,
             ),
           ),
           const SizedBox(height: 24),
@@ -241,7 +228,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     IconData icon,
     TextEditingController controller,
   ) {
-    // Jangan tampilkan field password ke user
+    
     if (label.toLowerCase().contains('password')) {
       return const SizedBox.shrink();
     }

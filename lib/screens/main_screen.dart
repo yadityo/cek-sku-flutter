@@ -101,7 +101,7 @@ class _MainScreenState extends State<MainScreen> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: AppColors.elzattaPurple,
+                  color: AppColors.biru,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Center(

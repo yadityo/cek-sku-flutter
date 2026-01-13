@@ -1,9 +1,7 @@
-import 'package:cek_sku/services/api_service.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
 import '../constants/app_colors.dart';
+import '../services/postgres_service.dart'; 
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -27,46 +25,43 @@ class _SearchScreenState extends State<SearchScreen> {
   Future<void> _performSearch() async {
     final keyword = _searchController.text.trim();
     if (keyword.isEmpty) return;
+
     setState(() {
       _isLoading = true;
       _errorMessage = '';
       _foundProduct = null;
     });
+
     final prefs = await SharedPreferences.getInstance();
     final serverIp = prefs.getString('server_ip') ?? '192.168.1.100';
-    final storeCode = prefs.getString('store_code') ?? 'STORE-001';
-    String baseUrl = serverIp;
-    if (!baseUrl.startsWith('http')) {
-      baseUrl = 'http://$baseUrl:3000';
-    }
+    final dbName = prefs.getString('db_name') ?? 'inventory_db';
+    
+    
+    
+    final dbPassword = 'password'; 
+
     try {
-      final response = await ApiService.postRequest(
-        baseUrl: baseUrl,
-        endpoint: '/api/search',
-        body: {
-          'keyword': keyword,
-          'user': storeCode,
-        },
+      
+      final dbService = PostgresService(
+        host: serverIp,
+        databaseName: dbName,
+        username: 'postgres', 
+        password: dbPassword,
       );
-      if (response.statusCode == 200) {
-        final result = jsonDecode(response.body);
-        if (result['status'] == 'success') {
-          final List<dynamic> products = result['data'];
-          if (products.isNotEmpty) {
-            setState(() {
-              _foundProduct = products[0];
-            });
-          } else {
-            _showNotFoundDialog();
-          }
-        } else {
-          _showErrorDialog(result['message'] ?? 'Terjadi kesalahan di server');
-        }
+
+      
+      final result = await dbService.searchProduct(keyword);
+
+      if (result != null) {
+        setState(() {
+          _foundProduct = result;
+        });
       } else {
-        _showErrorDialog('Error Server: ${response.statusCode}');
+        _showNotFoundDialog();
       }
     } catch (e) {
-      _showErrorDialog('Gagal koneksi ke Server. Cek IP & Jaringan.');
+      
+      _showErrorDialog('Gagal koneksi ke Database.\nError: $e');
     } finally {
       setState(() {
         _isLoading = false;
@@ -112,6 +107,8 @@ class _SearchScreenState extends State<SearchScreen> {
     });
   }
 
+  
+  
   Widget _buildMobileView(BuildContext context) {
     return Column(
       children: [
@@ -186,7 +183,7 @@ class _SearchScreenState extends State<SearchScreen> {
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            color: AppColors.elzattaPurple,
+                            color: AppColors.biru,
                           ),
                         ),
                       ],
@@ -221,20 +218,18 @@ class _SearchScreenState extends State<SearchScreen> {
           child: TextField(
             controller: _searchController,
             onSubmitted: (_) => _performSearch(),
-            // Menambahkan listener untuk update icon X secara real-time
             onChanged: (value) {
               setState(() {});
             },
             decoration: InputDecoration(
               hintText: "Cari Barang/SKU...",
               prefixIcon: const Icon(Icons.search, color: AppColors.slate400),
-              // TOMBOL X (Clear) di dalam ujung kanan Search Bar
               suffixIcon: _searchController.text.isNotEmpty
                   ? IconButton(
                       icon: const Icon(Icons.cancel, color: AppColors.slate400),
                       onPressed: () {
                         _searchController.clear();
-                        setState(() {}); // Refresh untuk menyembunyikan icon X
+                        setState(() {});
                       },
                     )
                   : null,
@@ -260,7 +255,6 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ),
         const SizedBox(width: 8),
-        // TOMBOL CARI di sebelah kanan Search Bar
         ElevatedButton(
           onPressed: _isLoading ? null : _performSearch,
           style: ElevatedButton.styleFrom(
@@ -296,10 +290,10 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
     if (_foundProduct == null) {
-      return Center(
+      return const Center(
         child: Text(
           "Silakan cari barang.",
-          style: const TextStyle(color: AppColors.slate400),
+          style: TextStyle(color: AppColors.slate400),
         ),
       );
     }
@@ -324,11 +318,11 @@ class _SearchScreenState extends State<SearchScreen> {
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: AppColors.slate100),
         boxShadow: [
-                BoxShadow(
-                  color: const Color.fromARGB(13, 0, 0, 0),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       padding: const EdgeInsets.all(24),
@@ -381,7 +375,7 @@ class _SearchScreenState extends State<SearchScreen> {
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: const Color.fromARGB(77, 0, 122, 255),
+                  color: AppColors.biru.withOpacity(0.3),
                   blurRadius: 12,
                   offset: const Offset(0, 6),
                 ),
@@ -391,8 +385,8 @@ class _SearchScreenState extends State<SearchScreen> {
               children: [
                 Text(
                   "Stock Saat Ini",
-                  style: const TextStyle(
-                    color: Color.fromARGB(204, 255, 255, 255),
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.8),
                     fontSize: 14,
                   ),
                 ),

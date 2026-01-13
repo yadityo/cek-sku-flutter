@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
 import '../constants/app_colors.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import '../services/api_service.dart';
+import '../services/postgres_service.dart'; 
 
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
@@ -13,68 +12,66 @@ class ScanScreen extends StatefulWidget {
 }
 
 class _ScanScreenState extends State<ScanScreen> {
+  final MobileScannerController _scannerController = MobileScannerController();
+  bool _torchOn = false;
   String? _barcode;
   bool _isProcessing = false;
-  Map<String, dynamic>? _foundProduct; // Menyimpan data produk hasil scan
-
+  Map<String, dynamic>? _foundProduct;
   DateTime? _lastScanTime;
+
   void _onDetect(BarcodeCapture capture) async {
     if (_isProcessing) return;
+
     final barcode = capture.barcodes.firstOrNull?.rawValue;
     final now = DateTime.now();
+
     if (barcode != null && barcode != _barcode) {
-      // Debounce: minimal 1.5 detik antar scan
-      if (_lastScanTime != null && now.difference(_lastScanTime!) < const Duration(milliseconds: 1500)) return;
+      
+      if (_lastScanTime != null &&
+          now.difference(_lastScanTime!) < const Duration(milliseconds: 1500))
+        return;
       _lastScanTime = now;
+
       setState(() {
         _isProcessing = true;
         _barcode = barcode;
         _foundProduct = null;
       });
+
       final prefs = await SharedPreferences.getInstance();
       final serverIp = prefs.getString('server_ip') ?? '192.168.1.100';
-      final storeCode = prefs.getString('store_code') ?? 'STORE-001';
-      String baseUrl = serverIp;
-      if (!baseUrl.startsWith('http')) {
-        baseUrl = 'http://$baseUrl:3000';
-      }
+      final dbName = prefs.getString('db_name') ?? 'inventory_db';
+      final dbPassword = 'password';
       try {
-        final response = await ApiService.postRequest(
-          baseUrl: baseUrl,
-          endpoint: '/api/search',
-          body: {
-            'keyword': barcode,
-            'user': storeCode,
-          },
+        final dbService = PostgresService(
+          host: serverIp,
+          databaseName: dbName,
+          username: 'postgres',
+          password: dbPassword,
         );
-        if (response.statusCode == 200) {
-          final result = jsonDecode(response.body);
-          if (result['status'] == 'success' && (result['data'] as List).isNotEmpty) {
-            setState(() {
-              _foundProduct = result['data'][0];
-            });
-          } else {
-            setState(() {
-              _foundProduct = {
-                'name': 'Barang tidak ditemukan',
-                'sku': barcode,
-                'quantity': 0,
-              };
-            });
-          }
+
+        final result = await dbService.searchProduct(barcode);
+
+        if (result != null) {
+          setState(() {
+            _foundProduct = result;
+          });
         } else {
+          
           setState(() {
             _foundProduct = {
-              'name': 'Error Server: ${response.statusCode}',
+              'name': 'Barang tidak ditemukan',
               'sku': barcode,
               'quantity': 0,
             };
           });
         }
       } catch (e) {
+        
         setState(() {
           _foundProduct = {
-            'name': 'Gagal koneksi ke server',
+            'name':
+                'Error DB: ${e.toString().split('\n').first}', 
             'sku': barcode,
             'quantity': 0,
           };
@@ -91,54 +88,126 @@ class _ScanScreenState extends State<ScanScreen> {
       builder: (context, constraints) {
         bool isTablet = constraints.maxWidth > 768;
         return Scaffold(
-          backgroundColor: const Color(0xFF0F172A), // Dark Background
+          backgroundColor: const Color(0xFF0F172A),
           body: isTablet ? _buildTabletView() : _buildMobileView(),
         );
       },
     );
   }
 
-  // --- VIEW MOBILE ---
+  
   Widget _buildMobileView() {
     return Stack(
       children: [
-        MobileScanner(onDetect: _onDetect, fit: BoxFit.cover),
+        MobileScanner(
+          controller: _scannerController,
+          onDetect: _onDetect,
+          fit: BoxFit.cover,
+        ),
         _buildScannerOverlay(label: "Posisikan barcode didalam frame"),
+        Positioned(
+          bottom: 70,
+          right: 0,
+          left: 0,
+          child: Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.biru,
+            ),
+            child: IconButton(
+              icon: Icon(
+                _torchOn ? Icons.flash_on : Icons.flash_off,
+                color: Colors.white,
+                size: 32,
+              ),
+              tooltip: 'Flashlight',
+              onPressed: () async {
+                await _scannerController.toggleTorch();
+                setState(() {
+                  _torchOn = !_torchOn;
+                });
+              },
+            ),
+          ),
+        ),
         if (_foundProduct != null) _buildBottomSheetMobile(),
       ],
     );
   }
 
-  // --- VIEW TABLET (LANDSCAPE) ---
+  
   Widget _buildTabletView() {
     return Row(
       children: [
-        // Sisi Kiri: Scanner
         Expanded(
           flex: 6,
           child: Stack(
             children: [
-              MobileScanner(onDetect: _onDetect, fit: BoxFit.cover),
+              MobileScanner(
+                controller: _scannerController,
+                onDetect: _onDetect,
+                fit: BoxFit.cover,
+              ),
               _buildScannerOverlay(label: "Posisikan barcode di dalam frame"),
               Positioned(
                 bottom: 40,
                 left: 0,
                 right: 0,
                 child: Center(
-                  child: IconButton(
-                    icon: const Icon(
-                      Icons.fullscreen_exit,
-                      color: Colors.white,
-                      size: 32,
-                    ),
-                    onPressed: () {},
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withOpacity(0.2),
+                      ),
+                      child: IconButton(
+                        icon: const Icon(
+                        Icons.fullscreen_exit,
+                        color: Colors.white,
+                        size: 32,
+                        ),
+                        tooltip: 'Exit Scan',
+                        onPressed: () {
+                        
+                        setState(() {
+                          _barcode = null;
+                          _foundProduct = null;
+                        });
+                        },
+                      ),
+                      ),
+                      const SizedBox(width: 190),
+                      Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withOpacity(0.2),
+                      ),
+                      child: IconButton(
+                        icon: Icon(
+                        _torchOn ? Icons.flash_on : Icons.flash_off,
+                        color: Colors.white,
+                        size: 32,
+                        ),
+                        tooltip: 'Flashlight',
+                        onPressed: () async {
+                        await _scannerController.toggleTorch();
+                        setState(() {
+                          _torchOn = !_torchOn;
+                        });
+                        },
+                      ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ],
           ),
         ),
-        // Sisi Kanan: Detail Info
         Expanded(
           flex: 4,
           child: Container(
@@ -153,25 +222,11 @@ class _ScanScreenState extends State<ScanScreen> {
     );
   }
 
-  // --- REUSABLE COMPONENTS ---
-
+  
+  
   Widget _buildScannerOverlay({required String label}) {
     return Stack(
       children: [
-        // Dim Background (Lubang di tengah)
-        ColorFiltered(
-          colorFilter: ColorFilter.mode(
-            Colors.black.withOpacity(0.5),
-            BlendMode.srcOver,
-          ),
-          child: Container(
-            decoration: const BoxDecoration(
-              color: Colors.black,
-              backgroundBlendMode: BlendMode.dstOut,
-            ),
-          ),
-        ),
-        // Text Hint
         Positioned(
           top: 80,
           left: 0,
@@ -193,7 +248,6 @@ class _ScanScreenState extends State<ScanScreen> {
             ),
           ),
         ),
-        // Scanner Frame (Blue border corners)
         Center(
           child: Container(
             width: 280,
@@ -211,7 +265,6 @@ class _ScanScreenState extends State<ScanScreen> {
                 _buildCorner(0, 0, top: true, left: false),
                 _buildCorner(0, 0, top: false, left: true),
                 _buildCorner(0, 0, top: false, left: false),
-                // Scanning Line Effect
                 const Center(
                   child: Divider(color: Colors.blueAccent, thickness: 2),
                 ),
@@ -268,7 +321,6 @@ class _ScanScreenState extends State<ScanScreen> {
   Widget _buildProductDetailPanel() {
     return Stack(
       children: [
-        // Main content
         Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -281,7 +333,6 @@ class _ScanScreenState extends State<ScanScreen> {
               style: TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 30),
-            // Product Card
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
@@ -305,7 +356,7 @@ class _ScanScreenState extends State<ScanScreen> {
                     ),
                     child: const Icon(
                       Icons.checkroom,
-                      color: AppColors.elzattaPurple,
+                      color: AppColors.biru,
                       size: 40,
                     ),
                   ),
@@ -315,7 +366,6 @@ class _ScanScreenState extends State<ScanScreen> {
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -324,26 +374,20 @@ class _ScanScreenState extends State<ScanScreen> {
                     style: const TextStyle(color: Colors.grey),
                   ),
                   const SizedBox(height: 16),
-                  // Stock Badge
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(20),
                     decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          AppColors.elzattaDarkPurple,
-                          AppColors.elzattaPurple,
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
+                      color: AppColors.biru,
                       borderRadius: BorderRadius.all(Radius.circular(16)),
                     ),
                     child: Column(
                       children: [
-                        Text(
+                        const Text(
                           "Stock Saat Ini",
-                          style: TextStyle(color: Color.fromARGB(179, 255, 255, 255)),
+                          style: TextStyle(
+                            color: Color.fromARGB(179, 255, 255, 255),
+                          ),
                         ),
                         Text(
                           "${_foundProduct?['quantity']?.toString() ?? '0'} unit",
@@ -361,7 +405,6 @@ class _ScanScreenState extends State<ScanScreen> {
             ),
           ],
         ),
-        // Close button
         Positioned(
           top: 0,
           right: 0,
@@ -370,8 +413,7 @@ class _ScanScreenState extends State<ScanScreen> {
             onPressed: () {
               setState(() {
                 _foundProduct = null;
-                _barcode =
-                    null; // Sembunyikan panel dengan menghapus data produk & barcode
+                _barcode = null;
               });
             },
             tooltip: 'Tutup',
