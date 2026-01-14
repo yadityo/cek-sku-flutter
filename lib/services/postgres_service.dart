@@ -109,7 +109,7 @@ class PostgresService {
     }
   }
 
-  Future<Map<String, dynamic>?> searchProduct(String keyword) async {
+  Future<List<Map<String, dynamic>>> searchProduct(String keyword) async {
     try {
       await _ensurePoolInitialized();
 
@@ -119,24 +119,22 @@ class PostgresService {
             'SELECT "Description" as name, "SKU" as sku, "EndQty" as quantity '
             'FROM "trStock" '
             'WHERE "Description" ILIKE @keyword OR "SKU" ILIKE @keyword '
-            'ORDER BY "LastUpdate" DESC LIMIT 1'
+            'ORDER BY "SKU", "Description", "TransDate" DESC'
           ),
           parameters: {'keyword': '%$keyword%'},
         );
       });
 
-      if (result.isEmpty) return null;
-
-      final row = result.first;
-      return {
-        'name': row[0],
-        'sku': row[1],
-        'quantity': row[2],
-      };
-
+      return result
+          .map((row) => {
+                'name': row[0],
+                'sku': row[1],
+                'quantity': row[2],
+              })
+          .toList();
     } catch (e) {
       if (e.toString().contains('SocketException') || e.toString().contains('Connection refused')) {
-         await resetPool();
+        await resetPool();
       }
       rethrow;
     }

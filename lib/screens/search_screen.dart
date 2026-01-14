@@ -15,7 +15,7 @@ class _SearchScreenState extends State<SearchScreen> {
   // Cache service agar tidak connect ulang terus menerus
   PostgresService? _dbService;
   
-  Map<String, dynamic>? _foundProduct;
+  List<Map<String, dynamic>>? _foundProducts;
   bool _isLoading = false;
   bool _hasSearched = false; // Untuk membedakan belum cari vs tidak ketemu
   String _errorMessage = '';
@@ -56,7 +56,7 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() {
       _isLoading = true;
       _errorMessage = '';
-      _foundProduct = null;
+      _foundProducts = null;
       _hasSearched = true; 
     });
 
@@ -66,18 +66,15 @@ class _SearchScreenState extends State<SearchScreen> {
 
       final result = await _dbService!.searchProduct(keyword);
 
-      // 4. OPTIMASI: Cek mounted sebelum update UI setelah proses async
       if (!mounted) return;
 
-      if (result != null) {
+      if (result.isNotEmpty) {
         setState(() {
-          _foundProduct = result;
+          _foundProducts = result;
         });
       } else {
-        // Kita tidak pakai dialog lagi agar UX lebih smooth,
-        // status not found ditangani di _buildContent
         setState(() {
-          _foundProduct = null;
+          _foundProducts = null;
         });
       }
     } catch (e) {
@@ -234,7 +231,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         _searchController.clear();
                         setState(() {
                           _hasSearched = false;
-                          _foundProduct = null;
+                          _foundProducts = null;
                           _errorMessage = '';
                         });
                       },
@@ -330,7 +327,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
     // Kondisi 2: Sudah cari, tapi hasil null (Tidak Ditemukan)
     // 5. OPTIMASI UX: Ganti Dialog dengan tampilan in-body
-    if (_foundProduct == null) {
+    if (_foundProducts == null) {
       return Center(
         child: Container(
           padding: const EdgeInsets.all(32),
@@ -361,11 +358,19 @@ class _SearchScreenState extends State<SearchScreen> {
     }
 
     // Kondisi 3: Barang Ditemukan
-    return _buildProductCard(
-      name: _foundProduct!['name'] ?? 'Unknown',
-      sku: _foundProduct!['sku'] ?? '-',
-      qty: _foundProduct!['quantity']?.toString() ?? '0',
-      isTablet: isTablet,
+    return Column(
+      children: [
+        for (final product in _foundProducts!)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 24.0),
+            child: _buildProductCard(
+              name: product['name'] ?? 'Unknown',
+              sku: product['sku'] ?? '-',
+              qty: product['quantity']?.toString() ?? '0',
+              isTablet: isTablet,
+            ),
+          ),
+      ],
     );
   }
 

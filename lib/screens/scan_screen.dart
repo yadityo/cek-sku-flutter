@@ -74,9 +74,9 @@ class _ScanScreenState extends State<ScanScreen> {
       // OPTIMASI: Cek mounted untuk mencegah error "setState called after dispose"
       if (!mounted) return;
 
-      if (result != null) {
+      if (result.isNotEmpty) {
         setState(() {
-          _foundProduct = result;
+          _foundProduct = result.first;
           _scanStatus = ScanStatus.found;
         });
       } else {
